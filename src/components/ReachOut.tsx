@@ -602,7 +602,22 @@ export default function ReachOut() {
                 <div className="ro-fg"><label className="ro-lbl">Your Email *</label><input className="ro-inp" type="email" value={form.email} onChange={e => setField("email", e.target.value)} placeholder="you@gmail.com" /></div>
               </div>
               <div className="ro-fg"><label className="ro-lbl">Your Phone</label><input className="ro-inp" value={form.phone} onChange={e => setField("phone", e.target.value)} placeholder="(555) 555-5555" /></div>
-              <div className="ro-fg"><label className="ro-lbl">Resume Summary (optional)</label><textarea className="ro-inp" rows={4} value={form.resume} onChange={e => setField("resume", e.target.value)} placeholder="Paste a 3-5 line summary of your resume / key experiences. This will be included in the email." style={{ resize: "vertical", minHeight: 80, lineHeight: 1.5 }} /></div>
+              <div className="ro-fg">
+                <label className="ro-lbl">Resume (PDF)</label>
+                <div className="ro-upload">
+                  <label htmlFor="ro-resume">{parsingResume ? "⏳ Reading…" : (form.resumeFileName ? "🔄 Replace PDF" : "📄 Upload Resume PDF")}</label>
+                  <input ref={resumeRef} id="ro-resume" type="file" accept="application/pdf,.pdf" onChange={onUploadResume} disabled={parsingResume} />
+                  {form.resumeFileName ? (
+                    <p style={{ marginTop: 8 }}>
+                      <strong style={{ color: "var(--text)" }}>{form.resumeFileName}</strong><br />
+                      {form.resume.length} characters extracted
+                      <button onClick={clearResume} className="ro-btn ro-btn-red" style={{ marginLeft: 8, padding: "3px 8px", fontSize: "0.55rem" }}>Remove</button>
+                    </p>
+                  ) : (
+                    <p>Text is extracted automatically and added to your email body. Max 5MB. Scanned image PDFs won't extract.</p>
+                  )}
+                </div>
+              </div>
             </div>
 
             <div className="ro-sec">
@@ -611,18 +626,41 @@ export default function ReachOut() {
               <div className="ro-fg"><label className="ro-lbl">Keyword Search</label><input className="ro-inp" value={form.search} onChange={e => setField("search", e.target.value)} placeholder="constitutional, oncology, AI..." /></div>
             </div>
 
+            {/* Creator-only: CSV upload */}
             <div className="ro-sec">
-              <div className="ro-sec-lbl">Add Contacts</div>
-              <div className="ro-upload">
-                <label htmlFor="ro-csv">📤 Upload CSV</label>
-                <input ref={fileRef} id="ro-csv" type="file" accept=".csv,text/csv" onChange={onUploadCSV} />
-                <p>Required columns: <code>name, email</code>. Optional: <code>field, institution, title, category, location</code>.</p>
-              </div>
-              {extraContacts.length > 0 && (
-                <div style={{ marginTop: 10, display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.7rem", color: "var(--muted)", fontFamily: "'IBM Plex Mono', monospace" }}>
-                  <span>{extraContacts.length} uploaded</span>
-                  <button className="ro-btn ro-btn-red" style={{ padding: "5px 10px", fontSize: "0.6rem" }} onClick={clearExtras}>Clear</button>
-                </div>
+              <div className="ro-sec-lbl">{isCreator ? "🔓 Creator · Add Contacts" : "Contacts Database"}</div>
+              {isCreator ? (
+                <>
+                  <div className="ro-upload">
+                    <label htmlFor="ro-csv">📤 Upload CSV</label>
+                    <input ref={fileRef} id="ro-csv" type="file" accept=".csv,text/csv" onChange={onUploadCSV} />
+                    <p>Required: <code>name, email</code>. Optional: <code>field, institution, title, category, location</code>.</p>
+                  </div>
+                  <div style={{ marginTop: 10, display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.66rem", color: "var(--muted)", fontFamily: "'IBM Plex Mono', monospace", gap: 8, flexWrap: "wrap" }}>
+                    <span>{extraContacts.length} added by you</span>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      {extraContacts.length > 0 && <button className="ro-btn ro-btn-red" style={{ padding: "5px 10px", fontSize: "0.6rem" }} onClick={clearExtras}>Clear</button>}
+                      <button className="ro-btn ro-btn-outline" style={{ padding: "5px 10px", fontSize: "0.6rem" }} onClick={lockCreator}>Lock</button>
+                    </div>
+                  </div>
+                </>
+              ) : showUnlock ? (
+                <>
+                  <div className="ro-fg">
+                    <input className="ro-inp" type="password" placeholder="Enter creator passcode" value={unlockInput} onChange={e => setUnlockInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter") tryUnlock(); }} autoFocus />
+                  </div>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button className="ro-btn ro-btn-dark" style={{ flex: 1, justifyContent: "center" }} onClick={tryUnlock}>Unlock</button>
+                    <button className="ro-btn ro-btn-outline" onClick={() => { setShowUnlock(false); setUnlockInput(""); }}>Cancel</button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p style={{ fontSize: "0.72rem", color: "var(--muted)", lineHeight: 1.5, marginBottom: 10 }}>
+                    The contact list is curated by the creator. {extraContacts.length > 0 && <>({extraContacts.length} extras loaded.)</>}
+                  </p>
+                  <button className="ro-btn ro-btn-outline ro-btn-full" onClick={() => setShowUnlock(true)}>🔒 Creator login</button>
+                </>
               )}
             </div>
           </div>
