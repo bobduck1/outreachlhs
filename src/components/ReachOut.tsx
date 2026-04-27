@@ -282,6 +282,7 @@ const DEFAULT_FORM: FormState = {
   phone: "",
   location: "Livingston, NJ",
   resume: "",
+  resumeFileName: "",
   search: "",
 };
 
