@@ -260,8 +260,11 @@ function buildBody(contact: Contact, catKey: string, info: FormState): string {
     ? `Your work on ${contact.field}${contact.institution ? ` at ${contact.institution}` : ""} aligns directly with what I hope to study and pursue.`
     : `I came across your work${contact.institution ? ` at ${contact.institution}` : ""} and found it genuinely compelling.`;
 
-  const resumeLine = resume.trim()
-    ? `\n\nA brief summary of my background:\n${resume.trim()}`
+  // Resume from PDF: include a trimmed background summary in the email body.
+  const resumeText = resume.trim();
+  const resumeSnippet = resumeText.length > 900 ? resumeText.slice(0, 900).trimEnd() + "…" : resumeText;
+  const resumeLine = resumeSnippet
+    ? `\n\nA brief summary of my background (extracted from my resume):\n${resumeSnippet}`
     : `\n\nI would be glad to share my resume at your convenience.`;
 
   return `Dear ${sal} ${lastName},\n\n${opener}\n\n${interest}\n\n${ask}${resumeLine}\n\nI understand this is an unusual request from a high school student, and I deeply appreciate any time you can spare. Even brief guidance about how to prepare for this kind of work would be meaningful to me.\n\nThank you very much for your consideration.\n\nSincerely,\n${name}\n${email} | ${phone}`;
