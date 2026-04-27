@@ -311,7 +311,7 @@ export default function ReachOut() {
     setTimeout(() => { if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight; }, 50);
   }, []);
 
-  // Load saved form, extra contacts, queue
+  // Load saved form, extra contacts, queue, creator flag
   useEffect(() => {
     try {
       const f = localStorage.getItem(STORAGE_KEYS.form);
@@ -320,8 +320,65 @@ export default function ReachOut() {
       if (e) setExtraContacts(JSON.parse(e));
       const q = localStorage.getItem(STORAGE_KEYS.queue);
       if (q) setQueue(JSON.parse(q));
+      if (localStorage.getItem("reachout.creator") === "1") setIsCreator(true);
     } catch {}
   }, []);
+
+  // ── CREATOR UNLOCK ──────────────────────────────────────────────────────────
+  function tryUnlock() {
+    if (unlockInput.trim() === CREATOR_PASSCODE) {
+      localStorage.setItem("reachout.creator", "1");
+      setIsCreator(true);
+      setShowUnlock(false);
+      setUnlockInput("");
+      addLog("Creator mode unlocked. CSV upload available.", "ok");
+    } else {
+      addLog("Incorrect passcode.", "err");
+    }
+  }
+  function lockCreator() {
+    localStorage.removeItem("reachout.creator");
+    setIsCreator(false);
+    addLog("Creator mode locked.", "warn");
+  }
+
+  // ── RESUME PDF EXTRACTION (client-side via pdfjs) ───────────────────────────
+  async function onUploadResume(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { addLog("Resume must be under 5MB.", "err"); e.target.value = ""; return; }
+    setParsingResume(true);
+    addLog(`Reading ${file.name}…`, "info");
+    try {
+      const buf = await file.arrayBuffer();
+      // Lazy-load pdfjs only when needed (it's heavy)
+      const pdfjs: any = await import("pdfjs-dist/build/pdf.mjs");
+      const workerSrc = (await import("pdfjs-dist/build/pdf.worker.mjs?url")).default;
+      pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
+      const pdf = await pdfjs.getDocument({ data: buf }).promise;
+      let text = "";
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        const pageText = content.items.map((it: any) => ("str" in it ? it.str : "")).join(" ");
+        text += pageText + "\n";
+      }
+      const cleaned = text.replace(/[ \t]+/g, " ").replace(/\n{2,}/g, "\n").trim();
+      if (!cleaned) { addLog("No text could be extracted (is the PDF a scan?).", "warn"); }
+      setForm(f => ({ ...f, resume: cleaned, resumeFileName: file.name }));
+      addLog(`Resume parsed: ${cleaned.length} characters from ${file.name}.`, "ok");
+    } catch (err) {
+      addLog(`Resume parse failed: ${(err as Error).message}`, "err");
+    } finally {
+      setParsingResume(false);
+      e.target.value = "";
+    }
+  }
+  function clearResume() {
+    setForm(f => ({ ...f, resume: "", resumeFileName: "" }));
+    addLog("Resume cleared.", "warn");
+  }
+
 
   // Persist
   useEffect(() => { try { localStorage.setItem(STORAGE_KEYS.form, JSON.stringify(form)); } catch {} }, [form]);
