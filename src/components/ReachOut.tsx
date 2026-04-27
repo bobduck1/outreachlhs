@@ -1,5 +1,10 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 
+// ─── CREATOR ACCESS ───────────────────────────────────────────────────────────
+// Change this passcode to whatever you want. Anyone who enters it gets the
+// "creator" role in their browser (stored in localStorage) and can upload CSVs.
+const CREATOR_PASSCODE = "akhil-reachout-2025";
+
 // ─── STYLES ───────────────────────────────────────────────────────────────────
 const FONTS = `@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap');`;
 
@@ -141,7 +146,8 @@ type FormState = {
   email: string;
   phone: string;
   location: string;
-  resume: string;
+  resume: string;          // extracted text from PDF
+  resumeFileName: string;  // original filename, for display
   search: string;
 };
 
@@ -254,8 +260,11 @@ function buildBody(contact: Contact, catKey: string, info: FormState): string {
     ? `Your work on ${contact.field}${contact.institution ? ` at ${contact.institution}` : ""} aligns directly with what I hope to study and pursue.`
     : `I came across your work${contact.institution ? ` at ${contact.institution}` : ""} and found it genuinely compelling.`;
 
-  const resumeLine = resume.trim()
-    ? `\n\nA brief summary of my background:\n${resume.trim()}`
+  // Resume from PDF: include a trimmed background summary in the email body.
+  const resumeText = resume.trim();
+  const resumeSnippet = resumeText.length > 900 ? resumeText.slice(0, 900).trimEnd() + "…" : resumeText;
+  const resumeLine = resumeSnippet
+    ? `\n\nA brief summary of my background (extracted from my resume):\n${resumeSnippet}`
     : `\n\nI would be glad to share my resume at your convenience.`;
 
   return `Dear ${sal} ${lastName},\n\n${opener}\n\n${interest}\n\n${ask}${resumeLine}\n\nI understand this is an unusual request from a high school student, and I deeply appreciate any time you can spare. Even brief guidance about how to prepare for this kind of work would be meaningful to me.\n\nThank you very much for your consideration.\n\nSincerely,\n${name}\n${email} | ${phone}`;
@@ -276,6 +285,7 @@ const DEFAULT_FORM: FormState = {
   phone: "",
   location: "Livingston, NJ",
   resume: "",
+  resumeFileName: "",
   search: "",
 };
 
@@ -292,6 +302,11 @@ export default function ReachOut() {
   ]);
   const logRef = useRef<HTMLDivElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const resumeRef = useRef<HTMLInputElement | null>(null);
+  const [isCreator, setIsCreator] = useState(false);
+  const [showUnlock, setShowUnlock] = useState(false);
+  const [unlockInput, setUnlockInput] = useState("");
+  const [parsingResume, setParsingResume] = useState(false);
 
   const addLog = useCallback((msg: string, type = "info") => {
     const ts = new Date().toLocaleTimeString();
@@ -299,7 +314,7 @@ export default function ReachOut() {
     setTimeout(() => { if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight; }, 50);
   }, []);
 
-  // Load saved form, extra contacts, queue
+  // Load saved form, extra contacts, queue, creator flag
   useEffect(() => {
     try {
       const f = localStorage.getItem(STORAGE_KEYS.form);
@@ -308,8 +323,65 @@ export default function ReachOut() {
       if (e) setExtraContacts(JSON.parse(e));
       const q = localStorage.getItem(STORAGE_KEYS.queue);
       if (q) setQueue(JSON.parse(q));
+      if (localStorage.getItem("reachout.creator") === "1") setIsCreator(true);
     } catch {}
   }, []);
+
+  // ── CREATOR UNLOCK ──────────────────────────────────────────────────────────
+  function tryUnlock() {
+    if (unlockInput.trim() === CREATOR_PASSCODE) {
+      localStorage.setItem("reachout.creator", "1");
+      setIsCreator(true);
+      setShowUnlock(false);
+      setUnlockInput("");
+      addLog("Creator mode unlocked. CSV upload available.", "ok");
+    } else {
+      addLog("Incorrect passcode.", "err");
+    }
+  }
+  function lockCreator() {
+    localStorage.removeItem("reachout.creator");
+    setIsCreator(false);
+    addLog("Creator mode locked.", "warn");
+  }
+
+  // ── RESUME PDF EXTRACTION (client-side via pdfjs) ───────────────────────────
+  async function onUploadResume(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { addLog("Resume must be under 5MB.", "err"); e.target.value = ""; return; }
+    setParsingResume(true);
+    addLog(`Reading ${file.name}…`, "info");
+    try {
+      const buf = await file.arrayBuffer();
+      // Lazy-load pdfjs only when needed (it's heavy)
+      const pdfjs: any = await import("pdfjs-dist/build/pdf.mjs");
+      const workerSrc = (await import("pdfjs-dist/build/pdf.worker.mjs?url")).default;
+      pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
+      const pdf = await pdfjs.getDocument({ data: buf }).promise;
+      let text = "";
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        const pageText = content.items.map((it: any) => ("str" in it ? it.str : "")).join(" ");
+        text += pageText + "\n";
+      }
+      const cleaned = text.replace(/[ \t]+/g, " ").replace(/\n{2,}/g, "\n").trim();
+      if (!cleaned) { addLog("No text could be extracted (is the PDF a scan?).", "warn"); }
+      setForm(f => ({ ...f, resume: cleaned, resumeFileName: file.name }));
+      addLog(`Resume parsed: ${cleaned.length} characters from ${file.name}.`, "ok");
+    } catch (err) {
+      addLog(`Resume parse failed: ${(err as Error).message}`, "err");
+    } finally {
+      setParsingResume(false);
+      e.target.value = "";
+    }
+  }
+  function clearResume() {
+    setForm(f => ({ ...f, resume: "", resumeFileName: "" }));
+    addLog("Resume cleared.", "warn");
+  }
+
 
   // Persist
   useEffect(() => { try { localStorage.setItem(STORAGE_KEYS.form, JSON.stringify(form)); } catch {} }, [form]);
@@ -428,9 +500,26 @@ export default function ReachOut() {
   }
 
   function openGmailDraft(contact: QueueItem) {
-    window.open(gmailComposeURL(contact), "_blank", "noopener,noreferrer");
+    const url = gmailComposeURL(contact);
+    // Use window.top to bust out of any iframe (e.g. Lovable preview), since
+    // mail.google.com sends X-Frame-Options: DENY and refuses to load in frames.
+    const target = (window.top || window);
+    const win = target.open(url, "_blank", "noopener,noreferrer");
+    if (!win) {
+      addLog(`Popup blocked for ${contact.name}. Allow popups or use the "Copy link" button.`, "err");
+      return;
+    }
     setQueue(q => q.map(x => x.qid === contact.qid ? { ...x, status: "done" } : x));
     addLog(`Opened Gmail draft for ${contact.name}`, "ok");
+  }
+
+  async function copyDraftURL(contact: QueueItem) {
+    try {
+      await navigator.clipboard.writeText(gmailComposeURL(contact));
+      addLog(`Gmail link copied for ${contact.name}. Paste into a new browser tab.`, "ok");
+    } catch {
+      addLog("Could not copy to clipboard.", "err");
+    }
   }
 
   function openAllDrafts() {
@@ -530,7 +619,22 @@ export default function ReachOut() {
                 <div className="ro-fg"><label className="ro-lbl">Your Email *</label><input className="ro-inp" type="email" value={form.email} onChange={e => setField("email", e.target.value)} placeholder="you@gmail.com" /></div>
               </div>
               <div className="ro-fg"><label className="ro-lbl">Your Phone</label><input className="ro-inp" value={form.phone} onChange={e => setField("phone", e.target.value)} placeholder="(555) 555-5555" /></div>
-              <div className="ro-fg"><label className="ro-lbl">Resume Summary (optional)</label><textarea className="ro-inp" rows={4} value={form.resume} onChange={e => setField("resume", e.target.value)} placeholder="Paste a 3-5 line summary of your resume / key experiences. This will be included in the email." style={{ resize: "vertical", minHeight: 80, lineHeight: 1.5 }} /></div>
+              <div className="ro-fg">
+                <label className="ro-lbl">Resume (PDF)</label>
+                <div className="ro-upload">
+                  <label htmlFor="ro-resume">{parsingResume ? "⏳ Reading…" : (form.resumeFileName ? "🔄 Replace PDF" : "📄 Upload Resume PDF")}</label>
+                  <input ref={resumeRef} id="ro-resume" type="file" accept="application/pdf,.pdf" onChange={onUploadResume} disabled={parsingResume} />
+                  {form.resumeFileName ? (
+                    <p style={{ marginTop: 8 }}>
+                      <strong style={{ color: "var(--text)" }}>{form.resumeFileName}</strong><br />
+                      {form.resume.length} characters extracted
+                      <button onClick={clearResume} className="ro-btn ro-btn-red" style={{ marginLeft: 8, padding: "3px 8px", fontSize: "0.55rem" }}>Remove</button>
+                    </p>
+                  ) : (
+                    <p>Text is extracted automatically and added to your email body. Max 5MB. Scanned image PDFs won't extract.</p>
+                  )}
+                </div>
+              </div>
             </div>
 
             <div className="ro-sec">
@@ -539,18 +643,41 @@ export default function ReachOut() {
               <div className="ro-fg"><label className="ro-lbl">Keyword Search</label><input className="ro-inp" value={form.search} onChange={e => setField("search", e.target.value)} placeholder="constitutional, oncology, AI..." /></div>
             </div>
 
+            {/* Creator-only: CSV upload */}
             <div className="ro-sec">
-              <div className="ro-sec-lbl">Add Contacts</div>
-              <div className="ro-upload">
-                <label htmlFor="ro-csv">📤 Upload CSV</label>
-                <input ref={fileRef} id="ro-csv" type="file" accept=".csv,text/csv" onChange={onUploadCSV} />
-                <p>Required columns: <code>name, email</code>. Optional: <code>field, institution, title, category, location</code>.</p>
-              </div>
-              {extraContacts.length > 0 && (
-                <div style={{ marginTop: 10, display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.7rem", color: "var(--muted)", fontFamily: "'IBM Plex Mono', monospace" }}>
-                  <span>{extraContacts.length} uploaded</span>
-                  <button className="ro-btn ro-btn-red" style={{ padding: "5px 10px", fontSize: "0.6rem" }} onClick={clearExtras}>Clear</button>
-                </div>
+              <div className="ro-sec-lbl">{isCreator ? "🔓 Creator · Add Contacts" : "Contacts Database"}</div>
+              {isCreator ? (
+                <>
+                  <div className="ro-upload">
+                    <label htmlFor="ro-csv">📤 Upload CSV</label>
+                    <input ref={fileRef} id="ro-csv" type="file" accept=".csv,text/csv" onChange={onUploadCSV} />
+                    <p>Required: <code>name, email</code>. Optional: <code>field, institution, title, category, location</code>.</p>
+                  </div>
+                  <div style={{ marginTop: 10, display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.66rem", color: "var(--muted)", fontFamily: "'IBM Plex Mono', monospace", gap: 8, flexWrap: "wrap" }}>
+                    <span>{extraContacts.length} added by you</span>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      {extraContacts.length > 0 && <button className="ro-btn ro-btn-red" style={{ padding: "5px 10px", fontSize: "0.6rem" }} onClick={clearExtras}>Clear</button>}
+                      <button className="ro-btn ro-btn-outline" style={{ padding: "5px 10px", fontSize: "0.6rem" }} onClick={lockCreator}>Lock</button>
+                    </div>
+                  </div>
+                </>
+              ) : showUnlock ? (
+                <>
+                  <div className="ro-fg">
+                    <input className="ro-inp" type="password" placeholder="Enter creator passcode" value={unlockInput} onChange={e => setUnlockInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter") tryUnlock(); }} autoFocus />
+                  </div>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button className="ro-btn ro-btn-dark" style={{ flex: 1, justifyContent: "center" }} onClick={tryUnlock}>Unlock</button>
+                    <button className="ro-btn ro-btn-outline" onClick={() => { setShowUnlock(false); setUnlockInput(""); }}>Cancel</button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p style={{ fontSize: "0.72rem", color: "var(--muted)", lineHeight: 1.5, marginBottom: 10 }}>
+                    The contact list is curated by the creator. {extraContacts.length > 0 && <>({extraContacts.length} extras loaded.)</>}
+                  </p>
+                  <button className="ro-btn ro-btn-outline ro-btn-full" onClick={() => setShowUnlock(true)}>🔒 Creator login</button>
+                </>
               )}
             </div>
           </div>
@@ -629,7 +756,9 @@ export default function ReachOut() {
                   <button className="ro-btn ro-btn-red" onClick={clearQueue}>Clear Queue</button>
                 </div>
                 <div className="ro-notice">
-                  <strong>How drafts work:</strong> Clicking <em>Open in Gmail</em> opens a new Gmail compose window in your browser with the recipient, subject, and full personalized body pre-filled. Make sure you're signed into the Gmail account you want to send from. Review and click Send — or close to save as a draft.
+                  <strong>How drafts work:</strong> Click <em>Open in Gmail</em> to launch a new Gmail compose window with the recipient, subject, and personalized body pre-filled — make sure you're signed into the Gmail account you want to send from. Review and click Send (or close the tab to save as a draft).
+                  <br /><br />
+                  <strong>If Gmail says "refused to connect":</strong> you're viewing this app inside a preview frame. Open the published site in its own tab, or use the <em>Copy link</em> button and paste it into a fresh browser tab.
                 </div>
                 {queue.length === 0 ? (
                   <div className="ro-empty">
@@ -645,9 +774,12 @@ export default function ReachOut() {
                           <div className="ro-qcard-name">{c.name} <span className="ro-cat-tag">{c.catKey}</span></div>
                           <div className="ro-qcard-email">{c.email}</div>
                         </div>
-                        <a className="ro-mailto-btn" href={gmailComposeURL(c)} target="_blank" rel="noopener noreferrer" onClick={() => setQueue(q => q.map(x => x.qid === c.qid ? { ...x, status: "done" } : x))}>
+                        <button className="ro-mailto-btn" type="button" onClick={() => openGmailDraft(c)}>
                           Open in Gmail ↗
-                        </a>
+                        </button>
+                        <button className="ro-mailto-btn" type="button" onClick={() => copyDraftURL(c)} style={{ background: "var(--surface2)", color: "var(--text)", borderColor: "var(--border)" }}>
+                          Copy link
+                        </button>
                         <span className="ro-qcard-status">{c.status === "done" ? "✓ drafted" : "— pending"}</span>
                         <button className="ro-qcard-remove" onClick={() => removeFromQueue(c.qid)} title="Remove">×</button>
                       </div>
