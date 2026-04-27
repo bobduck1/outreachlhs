@@ -299,6 +299,11 @@ export default function ReachOut() {
   ]);
   const logRef = useRef<HTMLDivElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const resumeRef = useRef<HTMLInputElement | null>(null);
+  const [isCreator, setIsCreator] = useState(false);
+  const [showUnlock, setShowUnlock] = useState(false);
+  const [unlockInput, setUnlockInput] = useState("");
+  const [parsingResume, setParsingResume] = useState(false);
 
   const addLog = useCallback((msg: string, type = "info") => {
     const ts = new Date().toLocaleTimeString();
