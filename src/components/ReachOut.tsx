@@ -146,7 +146,8 @@ type FormState = {
   email: string;
   phone: string;
   location: string;
-  resume: string;
+  resume: string;          // extracted text from PDF
+  resumeFileName: string;  // original filename, for display
   search: string;
 };
 
