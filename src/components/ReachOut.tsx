@@ -500,9 +500,26 @@ export default function ReachOut() {
   }
 
   function openGmailDraft(contact: QueueItem) {
-    window.open(gmailComposeURL(contact), "_blank", "noopener,noreferrer");
+    const url = gmailComposeURL(contact);
+    // Use window.top to bust out of any iframe (e.g. Lovable preview), since
+    // mail.google.com sends X-Frame-Options: DENY and refuses to load in frames.
+    const target = (window.top || window);
+    const win = target.open(url, "_blank", "noopener,noreferrer");
+    if (!win) {
+      addLog(`Popup blocked for ${contact.name}. Allow popups or use the "Copy link" button.`, "err");
+      return;
+    }
     setQueue(q => q.map(x => x.qid === contact.qid ? { ...x, status: "done" } : x));
     addLog(`Opened Gmail draft for ${contact.name}`, "ok");
+  }
+
+  async function copyDraftURL(contact: QueueItem) {
+    try {
+      await navigator.clipboard.writeText(gmailComposeURL(contact));
+      addLog(`Gmail link copied for ${contact.name}. Paste into a new browser tab.`, "ok");
+    } catch {
+      addLog("Could not copy to clipboard.", "err");
+    }
   }
 
   function openAllDrafts() {
