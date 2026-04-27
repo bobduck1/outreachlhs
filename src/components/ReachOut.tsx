@@ -756,7 +756,9 @@ export default function ReachOut() {
                   <button className="ro-btn ro-btn-red" onClick={clearQueue}>Clear Queue</button>
                 </div>
                 <div className="ro-notice">
-                  <strong>How drafts work:</strong> Clicking <em>Open in Gmail</em> opens a new Gmail compose window in your browser with the recipient, subject, and full personalized body pre-filled. Make sure you're signed into the Gmail account you want to send from. Review and click Send — or close to save as a draft.
+                  <strong>How drafts work:</strong> Click <em>Open in Gmail</em> to launch a new Gmail compose window with the recipient, subject, and personalized body pre-filled — make sure you're signed into the Gmail account you want to send from. Review and click Send (or close the tab to save as a draft).
+                  <br /><br />
+                  <strong>If Gmail says "refused to connect":</strong> you're viewing this app inside a preview frame. Open the published site in its own tab, or use the <em>Copy link</em> button and paste it into a fresh browser tab.
                 </div>
                 {queue.length === 0 ? (
                   <div className="ro-empty">
@@ -772,9 +774,12 @@ export default function ReachOut() {
                           <div className="ro-qcard-name">{c.name} <span className="ro-cat-tag">{c.catKey}</span></div>
                           <div className="ro-qcard-email">{c.email}</div>
                         </div>
-                        <a className="ro-mailto-btn" href={gmailComposeURL(c)} target="_blank" rel="noopener noreferrer" onClick={() => setQueue(q => q.map(x => x.qid === c.qid ? { ...x, status: "done" } : x))}>
+                        <button className="ro-mailto-btn" type="button" onClick={() => openGmailDraft(c)}>
                           Open in Gmail ↗
-                        </a>
+                        </button>
+                        <button className="ro-mailto-btn" type="button" onClick={() => copyDraftURL(c)} style={{ background: "var(--surface2)", color: "var(--text)", borderColor: "var(--border)" }}>
+                          Copy link
+                        </button>
                         <span className="ro-qcard-status">{c.status === "done" ? "✓ drafted" : "— pending"}</span>
                         <button className="ro-qcard-remove" onClick={() => removeFromQueue(c.qid)} title="Remove">×</button>
                       </div>
