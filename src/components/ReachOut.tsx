@@ -263,7 +263,8 @@ function buildBody(contact: Contact, catKey: string, info: FormState): string {
   else if (["polisci", "stem", "research"].includes(catKey)) sal = "Professor";
   const lastName = contact.name.split(" ").slice(-1)[0];
 
-  // Field-of-interest phrasing per category.
+  // Field-of-interest phrasing per category — used only if the student didn't
+  // type their own interests. We NEVER reference anything from the resume.
   const fieldPhrase: Record<string, string> = {
     polisci:     contact.field || "American politics, political behavior, and public policy",
     law:         contact.field || "the practice of law and the legal system",
@@ -291,35 +292,29 @@ function buildBody(contact: Contact, catKey: string, info: FormState): string {
 
   // Paragraph 2: reference what they actually do at their institution.
   const profileLine = (() => {
-    const parts: string[] = [];
+    const article = (contact.title && /^[aeiou]/i.test(contact.title)) ? "an" : "a";
     if (contact.title && contact.institution) {
-      parts.push(`I came across your profile at ${contact.institution} as ${/^[aeiou]/i.test(contact.title) ? "an" : "a"} ${contact.title}`);
-    } else if (contact.institution) {
-      parts.push(`I came across your work at ${contact.institution}`);
-    } else if (contact.title) {
-      parts.push(`I came across your work as ${contact.title}`);
-    } else {
-      parts.push(`I came across your work`);
+      return `I came across your profile at ${contact.institution} as ${article} ${contact.title}, and I was drawn to the department's strong emphasis on ${contact.field || "your area of work"}.`;
     }
-    if (contact.field) {
-      parts.push(`and I was drawn to your focus on ${contact.field}`);
+    if (contact.institution) {
+      return `I came across your work at ${contact.institution}, and I was drawn to the department's strong emphasis on ${contact.field || "your area of work"}.`;
     }
-    return parts.join(", ") + ".";
+    if (contact.title) {
+      return `I came across your work as ${contact.title}, and I was drawn to your focus on ${contact.field || "your area of work"}.`;
+    }
+    return `I came across your work, and I was drawn to your focus on ${contact.field || "your area of work"}.`;
   })();
 
-  // Optional light experience reference (only if a resume was provided).
-  const experience = resume.trim() ? pickExperienceSnippet(resume) : "";
-  const experienceLine = experience
-    ? ` Through my own experience — including ${experience.toLowerCase().replace(/\.$/, "")} — I have started building a foundation that I would love to expand under someone working directly in the field.`
-    : "";
+  // Connector sentence for paragraph 2 — generic, never references resume.
+  const connector = `The intersection of ${studentInterest}, which sits at the heart of how we understand the world around us, is something I think about constantly as a high school student navigating an overwhelming information environment.`;
 
-  // Closing resume line: only mention attaching if they uploaded one.
+  // Resume attachment line — only if a resume PDF was uploaded.
   const resumeAttachLine = resume.trim()
     ? ` I have attached my resume for your reference.`
     : ``;
 
   const opener = `My name is ${name}, and I am a ${grade} at ${school} in ${location}, with a strong interest in ${studentInterest}.`;
-  const para2 = `${profileLine}${experienceLine}`;
+  const para2 = `${profileLine} ${connector}`;
   const para3 = `${ask}${resumeAttachLine}`;
 
   const body = [
@@ -833,43 +828,6 @@ export default function ReachOut() {
               </div>
             </div>
 
-            {/* Creator-only: CSV upload */}
-            <div className="ro-sec">
-              <div className="ro-sec-lbl">{isCreator ? "🔓 Creator · Add Contacts" : "Contacts Database"}</div>
-              {isCreator ? (
-                <>
-                  <div className="ro-upload">
-                    <label htmlFor="ro-csv">📤 Upload CSV</label>
-                    <input ref={fileRef} id="ro-csv" type="file" accept=".csv,text/csv" onChange={onUploadCSV} />
-                    <p>Required: <code>name, email</code>. Optional: <code>field, institution, title, category, location</code>.</p>
-                  </div>
-                  <div style={{ marginTop: 10, display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.66rem", color: "var(--muted)", fontFamily: "'IBM Plex Mono', monospace", gap: 8, flexWrap: "wrap" }}>
-                    <span>{extraContacts.length} added by you</span>
-                    <div style={{ display: "flex", gap: 6 }}>
-                      {extraContacts.length > 0 && <button className="ro-btn ro-btn-red" style={{ padding: "5px 10px", fontSize: "0.6rem" }} onClick={clearExtras}>Clear</button>}
-                      <button className="ro-btn ro-btn-outline" style={{ padding: "5px 10px", fontSize: "0.6rem" }} onClick={lockCreator}>Lock</button>
-                    </div>
-                  </div>
-                </>
-              ) : showUnlock ? (
-                <>
-                  <div className="ro-fg">
-                    <input className="ro-inp" type="password" placeholder="Enter creator passcode" value={unlockInput} onChange={e => setUnlockInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter") tryUnlock(); }} autoFocus />
-                  </div>
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <button className="ro-btn ro-btn-dark" style={{ flex: 1, justifyContent: "center" }} onClick={tryUnlock} disabled={unlocking}>{unlocking ? "Checking…" : "Unlock"}</button>
-                    <button className="ro-btn ro-btn-outline" onClick={() => { setShowUnlock(false); setUnlockInput(""); }}>Cancel</button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <p style={{ fontSize: "0.72rem", color: "var(--muted)", lineHeight: 1.5, marginBottom: 10 }}>
-                    The contact list is curated by the creator. {extraContacts.length > 0 && <>({extraContacts.length} extras loaded.)</>}
-                  </p>
-                  <button className="ro-btn ro-btn-outline ro-btn-full" onClick={() => setShowUnlock(true)}>🔒 Creator login</button>
-                </>
-              )}
-            </div>
           </div>
 
           {/* CONTENT */}
