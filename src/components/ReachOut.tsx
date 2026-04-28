@@ -388,6 +388,7 @@ const DEFAULT_FORM: FormState = {
   location: "Livingston, NJ",
   resume: "",
   resumeFileName: "",
+  interests: "",
   search: "",
 };
 
