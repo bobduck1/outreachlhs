@@ -580,6 +580,19 @@ export default function ReachOut() {
     return out;
   }, [allContacts]);
 
+  // Tokens drawn from resume + interests for personalized ranking.
+  const studentTokens = useMemo(() => {
+    const set = new Set<string>();
+    tokenize(form.resume).forEach(t => set.add(t));
+    // Interests get a stronger weight by adding them twice in spirit — but since
+    // we use a set, instead we'll bias by re-checking interests inside the
+    // ranker below via a second pass. For now, just include them.
+    tokenize(form.interests).forEach(t => set.add(t));
+    return set;
+  }, [form.resume, form.interests]);
+
+  const canPersonalize = studentTokens.size >= 3; // need a meaningful signal
+
   const filtered = useMemo(() => {
     const def = CATS[cat];
     let list = allContacts;
@@ -588,7 +601,6 @@ export default function ReachOut() {
     }
     const loc = form.location.trim().toLowerCase();
     if (loc) {
-      // soft location filter — keep matches but rank them; for now filter only if state code is given
       const stateMatch = loc.match(/\b([a-z]{2})\b$/i);
       if (stateMatch) {
         const code = stateMatch[1].toUpperCase();
@@ -604,8 +616,24 @@ export default function ReachOut() {
         c.title.toLowerCase().includes(q)
       );
     }
+    if (personalized && canPersonalize) {
+      const interestTokens = new Set(tokenize(form.interests));
+      const scored = list
+        .map(c => {
+          let s = scoreContact(c, studentTokens);
+          // Extra weight if a token came from explicit interests.
+          for (const t of interestTokens) {
+            if (`${c.field} ${c.title} ${c.institution}`.toLowerCase().includes(t)) s += 2;
+          }
+          return { c, s };
+        })
+        .filter(x => x.s > 0)
+        .sort((a, b) => b.s - a.s)
+        .slice(0, 25);
+      return scored.map(x => x.c);
+    }
     return list;
-  }, [allContacts, cat, form.location, form.search]);
+  }, [allContacts, cat, form.location, form.search, personalized, canPersonalize, studentTokens, form.interests]);
 
   // Queue helpers
   function addToQueue(contact: Contact) {
