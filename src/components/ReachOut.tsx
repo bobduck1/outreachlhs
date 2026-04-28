@@ -827,6 +827,10 @@ export default function ReachOut() {
               <div className="ro-sec-lbl">Filters</div>
               <div className="ro-fg"><label className="ro-lbl">Location (e.g. NJ)</label><input className="ro-inp" value={form.location} onChange={e => setField("location", e.target.value)} placeholder="Livingston, NJ" /></div>
               <div className="ro-fg"><label className="ro-lbl">Keyword Search</label><input className="ro-inp" value={form.search} onChange={e => setField("search", e.target.value)} placeholder="constitutional, oncology, AI..." /></div>
+              <div className="ro-fg">
+                <label className="ro-lbl">Your Interests (for personalized matches)</label>
+                <textarea className="ro-ta" rows={2} value={form.interests} onChange={e => setField("interests", e.target.value)} placeholder="e.g. constitutional law, voting behavior, media's role in politics" />
+              </div>
             </div>
 
             {/* Creator-only: CSV upload */}
