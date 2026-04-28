@@ -953,7 +953,7 @@ export default function ReachOut() {
             {tab === "queue" && (
               <div className="ro-panel">
                 <div className="ro-stats-row">
-                  <div className="ro-stat-card"><span className="ro-stat-num">{queue.length}</span><span className="ro-stat-lbl">In Queue</span></div>
+                  <div className="ro-stat-card"><span className="ro-stat-num">{activeQueue.length}</span><span className="ro-stat-lbl">In Queue</span></div>
                   <div className="ro-stat-card s-green"><span className="ro-stat-num">{qDone}</span><span className="ro-stat-lbl">Drafted</span></div>
                   <div className="ro-stat-card s-orange"><span className="ro-stat-num">{qPending}</span><span className="ro-stat-lbl">Pending</span></div>
                 </div>
@@ -961,14 +961,17 @@ export default function ReachOut() {
                   <button className="ro-btn ro-btn-green" onClick={openAllDrafts} disabled={qPending === 0 || !formReady}>
                     ✉️ Open All in Gmail ({qPending})
                   </button>
+                  <button className="ro-btn ro-btn-dark" onClick={markAllSent} disabled={activeQueue.length === 0}>
+                    ✓ Mark All as Sent ({activeQueue.length})
+                  </button>
                   <button className="ro-btn ro-btn-red" onClick={clearQueue}>Clear Queue</button>
                 </div>
                 <div className="ro-notice">
-                  <strong>How drafts work:</strong> Click <em>Open in Gmail</em> to launch a new Gmail compose window with the recipient, subject, and personalized body pre-filled — make sure you're signed into the Gmail account you want to send from. Review and click Send (or close the tab to save as a draft).
+                  <strong>How it works:</strong> Click <em>Open in Gmail</em> to launch a pre-filled compose window. After you actually send the email, click the <strong>○ checkmark</strong> next to that person to mark them as sent — they'll move to the <em>Sent</em> tab and won't be re-emailed if you re-add them later. Use <em>Mark All as Sent</em> after a batch send.
                   <br /><br />
-                  <strong>If Gmail says "refused to connect":</strong> you're viewing this app inside a preview frame. Open the published site in its own tab, or use the <em>Copy link</em> button and paste it into a fresh browser tab.
+                  <strong>If Gmail says "refused to connect":</strong> open the published site in its own tab, or use the <em>Copy link</em> button.
                 </div>
-                {queue.length === 0 ? (
+                {activeQueue.length === 0 ? (
                   <div className="ro-empty">
                     <span className="ro-empty-icon">📋</span>
                     <div className="ro-empty-title">Queue is empty</div>
@@ -976,8 +979,16 @@ export default function ReachOut() {
                   </div>
                 ) : (
                   <div className="ro-qlist">
-                    {queue.map(c => (
+                    {activeQueue.map(c => (
                       <div key={c.qid} className={`ro-qcard st-${c.status}`}>
+                        <button
+                          type="button"
+                          className="ro-sent-check"
+                          onClick={() => markSent(c.qid)}
+                          title="Mark as sent — moves to Sent tab and prevents re-emailing"
+                        >
+                          ○
+                        </button>
                         <div className="ro-qcard-info">
                           <div className="ro-qcard-name">{c.name} <span className="ro-cat-tag">{c.catKey}</span></div>
                           <div className="ro-qcard-email">{c.email}</div>
@@ -990,6 +1001,47 @@ export default function ReachOut() {
                         </button>
                         <span className="ro-qcard-status">{c.status === "done" ? "✓ drafted" : "— pending"}</span>
                         <button className="ro-qcard-remove" onClick={() => removeFromQueue(c.qid)} title="Remove">×</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {tab === "sent" && (
+              <div className="ro-panel">
+                <div className="ro-stats-row">
+                  <div className="ro-stat-card s-green"><span className="ro-stat-num">{qSent}</span><span className="ro-stat-lbl">Already Emailed</span></div>
+                </div>
+                <div className="ro-notice">
+                  These contacts are marked as already emailed and are hidden from the Discover "+ Queue" action so you don't double-send. Click the blue ✓ to undo and put them back into the queue as pending.
+                </div>
+                {sentQueue.length === 0 ? (
+                  <div className="ro-empty">
+                    <span className="ro-empty-icon">✉️</span>
+                    <div className="ro-empty-title">No emails sent yet</div>
+                    <div className="ro-empty-sub">After you send a draft from Gmail, click the ○ next to that contact in the Draft Queue to record it here.</div>
+                  </div>
+                ) : (
+                  <div className="ro-qlist">
+                    {sentQueue.map(c => (
+                      <div key={c.qid} className={`ro-qcard st-sent`}>
+                        <button
+                          type="button"
+                          className="ro-sent-check checked"
+                          onClick={() => unmarkSent(c.qid)}
+                          title="Un-mark sent (puts contact back into Draft Queue)"
+                        >
+                          ✓
+                        </button>
+                        <div className="ro-qcard-info">
+                          <div className="ro-qcard-name">{c.name} <span className="ro-cat-tag">{c.catKey}</span></div>
+                          <div className="ro-qcard-email">{c.email}</div>
+                        </div>
+                        <span className="ro-qcard-status">
+                          ✓ sent{c.sentAt ? ` · ${new Date(c.sentAt).toLocaleDateString()}` : ""}
+                        </span>
+                        <button className="ro-qcard-remove" onClick={() => removeFromQueue(c.qid)} title="Remove from history">×</button>
                       </div>
                     ))}
                   </div>
