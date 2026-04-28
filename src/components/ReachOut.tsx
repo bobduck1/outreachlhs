@@ -900,8 +900,26 @@ export default function ReachOut() {
                 ) : (
                   <>
                     <div className="ro-results-header">
-                      <div className="ro-results-title">{filtered.length} {CATS[cat].name} contact{filtered.length === 1 ? "" : "s"}</div>
-                      <button className="ro-btn ro-btn-dark" onClick={addAllVisible} disabled={!formReady}>+ Add All to Queue</button>
+                      <div className="ro-results-title">
+                        {filtered.length} {personalized && canPersonalize ? "personalized match" : `${CATS[cat].name} contact`}{filtered.length === 1 ? "" : "s"}
+                        {personalized && canPersonalize && <span style={{ marginLeft: 8, fontFamily: "'IBM Plex Mono', monospace", fontSize: "0.62rem", color: "var(--green)", textTransform: "uppercase" }}>★ ranked by your resume</span>}
+                      </div>
+                      <div className="ro-btn-row">
+                        <button
+                          className={`ro-btn ${personalized ? "ro-btn-green" : "ro-btn-outline"}`}
+                          onClick={() => {
+                            if (!canPersonalize) {
+                              addLog("Add your resume PDF and/or interests to enable personalized matches.", "warn");
+                              return;
+                            }
+                            setPersonalized(p => !p);
+                          }}
+                          title={canPersonalize ? "Rank contacts by your resume + interests" : "Upload a resume or fill in interests first"}
+                        >
+                          {personalized ? "★ Personalized ON" : "★ Show Personalized Matches"}
+                        </button>
+                        <button className="ro-btn ro-btn-dark" onClick={addAllVisible} disabled={!formReady}>+ Add All to Queue</button>
+                      </div>
                     </div>
                     <div className="ro-results-grid">
                       {filtered.map(r => {
