@@ -857,7 +857,7 @@ export default function ReachOut() {
                     <input className="ro-inp" type="password" placeholder="Enter creator passcode" value={unlockInput} onChange={e => setUnlockInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter") tryUnlock(); }} autoFocus />
                   </div>
                   <div style={{ display: "flex", gap: 6 }}>
-                    <button className="ro-btn ro-btn-dark" style={{ flex: 1, justifyContent: "center" }} onClick={tryUnlock}>Unlock</button>
+                    <button className="ro-btn ro-btn-dark" style={{ flex: 1, justifyContent: "center" }} onClick={tryUnlock} disabled={unlocking}>{unlocking ? "Checking…" : "Unlock"}</button>
                     <button className="ro-btn ro-btn-outline" onClick={() => { setShowUnlock(false); setUnlockInput(""); }}>Cancel</button>
                   </div>
                 </>
