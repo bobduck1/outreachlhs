@@ -110,12 +110,17 @@ const css = `
   .ro-qcard { background: var(--surface); border: 2px solid var(--border); border-radius: 10px; padding: 12px 16px; display: flex; align-items: center; gap: 12px; border-left: 4px solid var(--border); flex-wrap: wrap; }
   .ro-qcard.st-pending { border-left-color: var(--muted); }
   .ro-qcard.st-done { border-left-color: var(--green); }
+  .ro-qcard.st-sent { border-left-color: var(--blue); opacity: 0.85; }
   .ro-qcard-info { flex: 1; min-width: 200px; }
   .ro-qcard-name { font-weight: 600; font-size: 0.88rem; }
   .ro-qcard-email { font-family: 'IBM Plex Mono', monospace; font-size: 0.66rem; color: var(--muted); margin-top: 2px; word-break: break-all; }
   .ro-qcard-status { font-family: 'IBM Plex Mono', monospace; font-size: 0.66rem; white-space: nowrap; }
   .st-pending .ro-qcard-status { color: var(--muted); }
   .st-done .ro-qcard-status { color: var(--green); }
+  .st-sent .ro-qcard-status { color: var(--blue); }
+  .ro-sent-check { background: transparent; border: 2px solid var(--border); width: 22px; height: 22px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 0.75rem; transition: all 0.15s; padding: 0; color: var(--muted); }
+  .ro-sent-check:hover { border-color: var(--blue); color: var(--blue); }
+  .ro-sent-check.checked { background: var(--blue); border-color: var(--blue); color: white; }
   .ro-qcard-remove { background: none; border: none; cursor: pointer; color: var(--muted); font-size: 1.1rem; padding: 2px 5px; border-radius: 4px; line-height: 1; }
   .ro-qcard-remove:hover { color: var(--red); }
   .ro-mailto-btn { font-family: 'IBM Plex Mono', monospace; font-size: 0.62rem; color: var(--blue); background: #eef3f8; border: 1px solid #c8d8e8; border-radius: 4px; padding: 5px 10px; cursor: pointer; text-decoration: none; display: inline-block; }
@@ -165,7 +170,7 @@ type FormState = {
   search: string;
 };
 
-type QueueItem = Contact & { qid: string; status: "pending" | "done"; catKey: string };
+type QueueItem = Contact & { qid: string; status: "pending" | "done" | "sent"; catKey: string; sentAt?: string };
 
 // ─── CSV PARSE (handles quoted fields) ────────────────────────────────────────
 function parseCSV(text: string): Record<string, string>[] {
@@ -390,7 +395,7 @@ const DEFAULT_FORM: FormState = {
 export default function ReachOut() {
   const [cat, setCat] = useState<string>("all");
   const [form, setForm] = useState<FormState>(DEFAULT_FORM);
-  const [tab, setTab] = useState<"discover" | "queue" | "log">("discover");
+  const [tab, setTab] = useState<"discover" | "queue" | "sent" | "log">("discover");
   const [baseContacts, setBaseContacts] = useState<Contact[]>([]);
   const [extraContacts, setExtraContacts] = useState<Contact[]>([]);
   const [queue, setQueue] = useState<QueueItem[]>([]);
@@ -638,7 +643,12 @@ export default function ReachOut() {
     addLog(`Queued: ${contact.name} <${contact.email}>`, "ok");
   }
   function toggleSelect(c: Contact) {
-    if (queue.some(q => q.email.toLowerCase() === c.email.toLowerCase())) {
+    const existing = queue.find(q => q.email.toLowerCase() === c.email.toLowerCase());
+    if (existing) {
+      if (existing.status === "sent") {
+        addLog(`${c.name} is already marked as sent — uncheck them in the Sent tab to re-add.`, "warn");
+        return;
+      }
       setQueue(q => q.filter(x => x.email.toLowerCase() !== c.email.toLowerCase()));
       addLog(`Removed from queue: ${c.name}`, "warn");
     } else {
@@ -661,9 +671,30 @@ export default function ReachOut() {
   }
   function clearQueue() {
     if (!queue.length) return;
-    if (!confirm("Clear the entire queue?")) return;
-    setQueue([]);
-    addLog("Queue cleared.", "warn");
+    if (!confirm("Clear the entire queue (does not affect Sent tab)?")) return;
+    // Only clear non-sent items so the "already-emailed" record is preserved.
+    setQueue(q => q.filter(x => x.status === "sent"));
+    addLog("Queue cleared (sent items preserved).", "warn");
+  }
+
+  // Mark a single queue item as sent (or unmark it).
+  function markSent(qid: string) {
+    setQueue(q => q.map(x => x.qid === qid ? { ...x, status: "sent", sentAt: new Date().toISOString() } : x));
+    const c = queue.find(x => x.qid === qid);
+    if (c) addLog(`Marked sent: ${c.name}`, "ok");
+  }
+  function unmarkSent(qid: string) {
+    setQueue(q => q.map(x => x.qid === qid ? { ...x, status: "pending", sentAt: undefined } : x));
+    const c = queue.find(x => x.qid === qid);
+    if (c) addLog(`Re-opened: ${c.name} (back to pending)`, "warn");
+  }
+  function markAllSent() {
+    const toMark = queue.filter(c => c.status !== "sent");
+    if (!toMark.length) return;
+    if (!confirm(`Mark all ${toMark.length} queued contact(s) as sent? They'll move to the Sent tab and won't be re-emailed.`)) return;
+    const now = new Date().toISOString();
+    setQueue(q => q.map(x => x.status === "sent" ? x : { ...x, status: "sent", sentAt: now }));
+    addLog(`Marked ${toMark.length} contact(s) as sent.`, "ok");
   }
 
   // Gmail compose URL — opens a new draft directly in Gmail web (per-user; whoever's signed in)
@@ -750,8 +781,11 @@ export default function ReachOut() {
     addLog("Cleared uploaded contacts.", "warn");
   }
 
+  const qSent = queue.filter(c => c.status === "sent").length;
   const qDone = queue.filter(c => c.status === "done").length;
   const qPending = queue.filter(c => c.status === "pending").length;
+  const activeQueue = queue.filter(c => c.status !== "sent");
+  const sentQueue = queue.filter(c => c.status === "sent");
   const formReady = form.name.trim() && form.school.trim() && form.email.trim();
 
   return (
@@ -765,8 +799,8 @@ export default function ReachOut() {
           </div>
           <div className="ro-hstats">
             <div className="ro-hstat"><span className="ro-hstat-num">{allContacts.length}</span><span className="ro-hstat-lbl">Contacts</span></div>
-            <div className="ro-hstat"><span className="ro-hstat-num">{queue.length}</span><span className="ro-hstat-lbl">Queued</span></div>
-            <div className="ro-hstat"><span className="ro-hstat-num">{qDone}</span><span className="ro-hstat-lbl">Drafted</span></div>
+            <div className="ro-hstat"><span className="ro-hstat-num">{activeQueue.length}</span><span className="ro-hstat-lbl">Queued</span></div>
+            <div className="ro-hstat"><span className="ro-hstat-num">{qSent}</span><span className="ro-hstat-lbl">Sent</span></div>
           </div>
         </div>
 
@@ -833,9 +867,13 @@ export default function ReachOut() {
           {/* CONTENT */}
           <div className="ro-content">
             <div className="ro-tabs">
-              {(["discover", "queue", "log"] as const).map(t => (
+              {(["discover", "queue", "sent", "log"] as const).map(t => (
                 <div key={t} className={`ro-tab${tab === t ? " active" : ""}`} onClick={() => setTab(t)}>
-                  {t === "queue" ? <>Draft Queue <span className="ro-qbadge">{queue.length}</span></> : t.charAt(0).toUpperCase() + t.slice(1)}
+                  {t === "queue"
+                    ? <>Draft Queue <span className="ro-qbadge">{activeQueue.length}</span></>
+                    : t === "sent"
+                    ? <>Sent <span className="ro-qbadge">{qSent}</span></>
+                    : t.charAt(0).toUpperCase() + t.slice(1)}
                 </div>
               ))}
             </div>
@@ -881,10 +919,12 @@ export default function ReachOut() {
                     </div>
                     <div className="ro-results-grid">
                       {filtered.map(r => {
-                        const inQ = queue.some(q => q.email.toLowerCase() === r.email.toLowerCase());
+                        const existing = queue.find(q => q.email.toLowerCase() === r.email.toLowerCase());
+                        const inQ = !!existing && existing.status !== "sent";
+                        const alreadySent = !!existing && existing.status === "sent";
                         return (
-                          <div key={r.id} className={`ro-card${inQ ? " selected" : ""}`}>
-                            <div className="ro-check" onClick={() => formReady && toggleSelect(r)}>{inQ ? "✓" : ""}</div>
+                          <div key={r.id} className={`ro-card${inQ ? " selected" : ""}`} style={alreadySent ? { opacity: 0.55 } : undefined}>
+                            <div className="ro-check" onClick={() => formReady && !alreadySent && toggleSelect(r)}>{inQ ? "✓" : alreadySent ? "✉" : ""}</div>
                             <div className="ro-card-info">
                               <div className="ro-card-name">{r.name}</div>
                               <div className="ro-card-inst">
@@ -895,7 +935,9 @@ export default function ReachOut() {
                             </div>
                             <div className="ro-card-right">
                               <span className="ro-cat-tag">{r.category || "general"}</span>
-                              {!inQ
+                              {alreadySent
+                                ? <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "0.62rem", color: "var(--blue)" }}>✓ already emailed</span>
+                                : !inQ
                                 ? <button className="ro-btn ro-btn-outline" style={{ padding: "5px 11px", fontSize: "0.62rem" }} onClick={() => addToQueue(r)} disabled={!formReady}>+ Queue</button>
                                 : <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "0.62rem", color: "var(--green)" }}>In queue</span>}
                             </div>
@@ -911,7 +953,7 @@ export default function ReachOut() {
             {tab === "queue" && (
               <div className="ro-panel">
                 <div className="ro-stats-row">
-                  <div className="ro-stat-card"><span className="ro-stat-num">{queue.length}</span><span className="ro-stat-lbl">In Queue</span></div>
+                  <div className="ro-stat-card"><span className="ro-stat-num">{activeQueue.length}</span><span className="ro-stat-lbl">In Queue</span></div>
                   <div className="ro-stat-card s-green"><span className="ro-stat-num">{qDone}</span><span className="ro-stat-lbl">Drafted</span></div>
                   <div className="ro-stat-card s-orange"><span className="ro-stat-num">{qPending}</span><span className="ro-stat-lbl">Pending</span></div>
                 </div>
@@ -919,14 +961,17 @@ export default function ReachOut() {
                   <button className="ro-btn ro-btn-green" onClick={openAllDrafts} disabled={qPending === 0 || !formReady}>
                     ✉️ Open All in Gmail ({qPending})
                   </button>
+                  <button className="ro-btn ro-btn-dark" onClick={markAllSent} disabled={activeQueue.length === 0}>
+                    ✓ Mark All as Sent ({activeQueue.length})
+                  </button>
                   <button className="ro-btn ro-btn-red" onClick={clearQueue}>Clear Queue</button>
                 </div>
                 <div className="ro-notice">
-                  <strong>How drafts work:</strong> Click <em>Open in Gmail</em> to launch a new Gmail compose window with the recipient, subject, and personalized body pre-filled — make sure you're signed into the Gmail account you want to send from. Review and click Send (or close the tab to save as a draft).
+                  <strong>How it works:</strong> Click <em>Open in Gmail</em> to launch a pre-filled compose window. After you actually send the email, click the <strong>○ checkmark</strong> next to that person to mark them as sent — they'll move to the <em>Sent</em> tab and won't be re-emailed if you re-add them later. Use <em>Mark All as Sent</em> after a batch send.
                   <br /><br />
-                  <strong>If Gmail says "refused to connect":</strong> you're viewing this app inside a preview frame. Open the published site in its own tab, or use the <em>Copy link</em> button and paste it into a fresh browser tab.
+                  <strong>If Gmail says "refused to connect":</strong> open the published site in its own tab, or use the <em>Copy link</em> button.
                 </div>
-                {queue.length === 0 ? (
+                {activeQueue.length === 0 ? (
                   <div className="ro-empty">
                     <span className="ro-empty-icon">📋</span>
                     <div className="ro-empty-title">Queue is empty</div>
@@ -934,8 +979,16 @@ export default function ReachOut() {
                   </div>
                 ) : (
                   <div className="ro-qlist">
-                    {queue.map(c => (
+                    {activeQueue.map(c => (
                       <div key={c.qid} className={`ro-qcard st-${c.status}`}>
+                        <button
+                          type="button"
+                          className="ro-sent-check"
+                          onClick={() => markSent(c.qid)}
+                          title="Mark as sent — moves to Sent tab and prevents re-emailing"
+                        >
+                          ○
+                        </button>
                         <div className="ro-qcard-info">
                           <div className="ro-qcard-name">{c.name} <span className="ro-cat-tag">{c.catKey}</span></div>
                           <div className="ro-qcard-email">{c.email}</div>
@@ -948,6 +1001,47 @@ export default function ReachOut() {
                         </button>
                         <span className="ro-qcard-status">{c.status === "done" ? "✓ drafted" : "— pending"}</span>
                         <button className="ro-qcard-remove" onClick={() => removeFromQueue(c.qid)} title="Remove">×</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {tab === "sent" && (
+              <div className="ro-panel">
+                <div className="ro-stats-row">
+                  <div className="ro-stat-card s-green"><span className="ro-stat-num">{qSent}</span><span className="ro-stat-lbl">Already Emailed</span></div>
+                </div>
+                <div className="ro-notice">
+                  These contacts are marked as already emailed and are hidden from the Discover "+ Queue" action so you don't double-send. Click the blue ✓ to undo and put them back into the queue as pending.
+                </div>
+                {sentQueue.length === 0 ? (
+                  <div className="ro-empty">
+                    <span className="ro-empty-icon">✉️</span>
+                    <div className="ro-empty-title">No emails sent yet</div>
+                    <div className="ro-empty-sub">After you send a draft from Gmail, click the ○ next to that contact in the Draft Queue to record it here.</div>
+                  </div>
+                ) : (
+                  <div className="ro-qlist">
+                    {sentQueue.map(c => (
+                      <div key={c.qid} className={`ro-qcard st-sent`}>
+                        <button
+                          type="button"
+                          className="ro-sent-check checked"
+                          onClick={() => unmarkSent(c.qid)}
+                          title="Un-mark sent (puts contact back into Draft Queue)"
+                        >
+                          ✓
+                        </button>
+                        <div className="ro-qcard-info">
+                          <div className="ro-qcard-name">{c.name} <span className="ro-cat-tag">{c.catKey}</span></div>
+                          <div className="ro-qcard-email">{c.email}</div>
+                        </div>
+                        <span className="ro-qcard-status">
+                          ✓ sent{c.sentAt ? ` · ${new Date(c.sentAt).toLocaleDateString()}` : ""}
+                        </span>
+                        <button className="ro-qcard-remove" onClick={() => removeFromQueue(c.qid)} title="Remove from history">×</button>
                       </div>
                     ))}
                   </div>
