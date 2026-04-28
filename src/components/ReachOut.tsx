@@ -237,8 +237,25 @@ function buildSubject(contact: Contact, catKey: string, school: string): string 
   return map[catKey] || `High School Student Seeking Opportunity in ${contact.field || "Your Field"}`;
 }
 
+// Pull a short, lightly-referenced "experience" snippet out of the resume.
+// We grab the first plausible bullet/role line so the email can lightly cite
+// real experience without dumping the whole resume.
+function pickExperienceSnippet(resume: string): string {
+  const text = resume.trim();
+  if (!text) return "";
+  // Split into lines; prefer ones that look like roles/bullets and aren't headers.
+  const lines = text.split(/\n+/).map(l => l.trim()).filter(Boolean);
+  const blacklist = /^(resume|curriculum vitae|education|experience|skills|projects|contact|objective|summary)$/i;
+  const candidates = lines.filter(l =>
+    l.length >= 25 && l.length <= 220 && !blacklist.test(l)
+  );
+  const pick = candidates[0] || lines.find(l => l.length > 20) || "";
+  // Strip trailing punctuation/dates noise, lower-case the leading verb if shouty.
+  return pick.replace(/\s+/g, " ").replace(/[•●▪–—-]\s*/g, "").trim();
+}
+
 function buildBody(contact: Contact, catKey: string, info: FormState): string {
-  const { name, school, grade, email, phone, location, resume } = info;
+  const { name, school, grade, email, phone, location, resume, interests } = info;
   const titleRaw = (contact.title || "").toLowerCase();
   let sal = "Mr.";
   if (titleRaw.includes("professor") || titleRaw.includes("prof")) sal = "Professor";
@@ -246,42 +263,113 @@ function buildBody(contact: Contact, catKey: string, info: FormState): string {
   else if (["polisci", "stem", "research"].includes(catKey)) sal = "Professor";
   const lastName = contact.name.split(" ").slice(-1)[0];
 
-  const openers: Record<string, string> = {
-    polisci:     `My name is ${name}, and I am a ${grade} at ${school} in ${location}, with a strong interest in ${contact.field || "political science and public policy"} and a long-term goal of attending law school.`,
-    law:         `My name is ${name}, and I am a ${grade} at ${school} in ${location}. I am writing to ask if there is any possibility of briefly shadowing at ${contact.institution || "your office"}.`,
-    stem:        `My name is ${name}, and I am a ${grade} at ${school} in ${location}, with a strong interest in ${contact.field || "scientific research"} and a long-term goal of pursuing research in college.`,
-    premed:      `My name is ${name}, and I am a ${grade} at ${school} in ${location}, with a strong interest in medicine and a long-term goal of attending medical school.`,
-    business:    `My name is ${name}, and I am a ${grade} at ${school} in ${location}, with a growing interest in ${contact.field || "business and finance"} and a long-term goal of studying business or economics in college.`,
-    research:    `My name is ${name}, and I am a ${grade} at ${school} in ${location}, with a strong interest in public policy research and a long-term goal of pursuing political science and law in college.`,
-    engineering: `My name is ${name}, and I am a ${grade} at ${school} in ${location}, with a strong interest in ${contact.field || "engineering"} and a long-term goal of studying engineering in college.`,
-    nonprofit:   `My name is ${name}, and I am a ${grade} at ${school} in ${location}, with a strong interest in civic engagement and social impact.`,
+  // Field-of-interest phrasing per category.
+  const fieldPhrase: Record<string, string> = {
+    polisci:     contact.field || "American politics, political behavior, and public policy",
+    law:         contact.field || "the practice of law and the legal system",
+    stem:        contact.field || "scientific research",
+    premed:      contact.field || "medicine and clinical practice",
+    business:    contact.field || "business and finance",
+    research:    contact.field || "public policy research",
+    engineering: contact.field || "engineering",
+    nonprofit:   contact.field || "civic engagement and social impact",
   };
+  const studentInterest = interests.trim() || fieldPhrase[catKey] || (contact.field || "your field");
 
+  // Ask line per category.
   const asks: Record<string, string> = {
-    polisci:     `I am reaching out to ask if there is any way I could contribute to your research in a small, supporting capacity — literature review, data organization, or background research, whatever would be most helpful.`,
-    law:         `I have a serious long-term interest in law school and am looking to get my first real exposure to legal practice before college. I am not seeking payment and would work entirely around your schedule.`,
-    stem:        `I am reaching out to ask if there is any way I could contribute to your research in a supporting capacity — literature review, data organization, lab preparation, or any other tasks.`,
+    polisci:     `I am reaching out to ask if there is any way I could contribute to your research in a small, supporting capacity. I am willing to assist with background research, literature review, or document organization, whatever would be most helpful.`,
+    law:         `I am reaching out to ask if there is any possibility of briefly shadowing your work, even for a day or two. I am not seeking payment and would work entirely around your schedule.`,
+    stem:        `I am reaching out to ask if there is any way I could contribute to your research in a small, supporting capacity. I am willing to assist with literature review, data organization, or lab preparation, whatever would be most helpful.`,
     premed:      `I am reaching out to ask if there is any possibility of briefly shadowing your practice, even for a day or two. I am not seeking payment and would work entirely around your schedule.`,
     business:    `I am reaching out to ask if there is any possibility of a brief shadowing experience or informational conversation about your work.`,
-    research:    `I am reaching out to ask if there is any way I could contribute to your organization's research in a small, supporting capacity — background research, literature review, or any supporting tasks.`,
+    research:    `I am reaching out to ask if there is any way I could contribute to your organization's research in a small, supporting capacity. I am willing to assist with background research, literature review, or any supporting tasks.`,
     engineering: `I am reaching out to ask if there is any possibility of briefly shadowing your work, or contributing to any ongoing projects in a small way.`,
     nonprofit:   `I am reaching out to ask if there is any opportunity to volunteer, shadow, or contribute to your organization's work in a small way.`,
   };
-
-  const opener = openers[catKey] || openers.polisci;
   const ask = asks[catKey] || asks.polisci;
-  const interest = contact.field
-    ? `Your work on ${contact.field}${contact.institution ? ` at ${contact.institution}` : ""} aligns directly with what I hope to study and pursue.`
-    : `I came across your work${contact.institution ? ` at ${contact.institution}` : ""} and found it genuinely compelling.`;
 
-  // Resume from PDF: include a trimmed background summary in the email body.
-  const resumeText = resume.trim();
-  const resumeSnippet = resumeText.length > 900 ? resumeText.slice(0, 900).trimEnd() + "…" : resumeText;
-  const resumeLine = resumeSnippet
-    ? `\n\nA brief summary of my background (extracted from my resume):\n${resumeSnippet}`
-    : `\n\nI would be glad to share my resume at your convenience.`;
+  // Paragraph 2: reference what they actually do at their institution.
+  const profileLine = (() => {
+    const parts: string[] = [];
+    if (contact.title && contact.institution) {
+      parts.push(`I came across your profile at ${contact.institution} as ${/^[aeiou]/i.test(contact.title) ? "an" : "a"} ${contact.title}`);
+    } else if (contact.institution) {
+      parts.push(`I came across your work at ${contact.institution}`);
+    } else if (contact.title) {
+      parts.push(`I came across your work as ${contact.title}`);
+    } else {
+      parts.push(`I came across your work`);
+    }
+    if (contact.field) {
+      parts.push(`and I was drawn to your focus on ${contact.field}`);
+    }
+    return parts.join(", ") + ".";
+  })();
 
-  return `Dear ${sal} ${lastName},\n\n${opener}\n\n${interest}\n\n${ask}${resumeLine}\n\nI understand this is an unusual request from a high school student, and I deeply appreciate any time you can spare. Even brief guidance about how to prepare for this kind of work would be meaningful to me.\n\nThank you very much for your consideration.\n\nSincerely,\n${name}\n${email} | ${phone}`;
+  // Optional light experience reference (only if a resume was provided).
+  const experience = resume.trim() ? pickExperienceSnippet(resume) : "";
+  const experienceLine = experience
+    ? ` Through my own experience — including ${experience.toLowerCase().replace(/\.$/, "")} — I have started building a foundation that I would love to expand under someone working directly in the field.`
+    : "";
+
+  // Closing resume line: only mention attaching if they uploaded one.
+  const resumeAttachLine = resume.trim()
+    ? ` I have attached my resume for your reference.`
+    : ``;
+
+  const opener = `My name is ${name}, and I am a ${grade} at ${school} in ${location}, with a strong interest in ${studentInterest}.`;
+  const para2 = `${profileLine}${experienceLine}`;
+  const para3 = `${ask}${resumeAttachLine}`;
+
+  const body = [
+    `Dear ${sal} ${lastName},`,
+    opener,
+    para2,
+    para3,
+    `I understand this is an unusual request coming from a high school student, and I deeply appreciate any time you can spare. Even brief guidance about how to prepare for this kind of work would be meaningful to me.`,
+    `Thank you very much for your consideration.`,
+    `Sincerely,`,
+    `${name}`,
+    `${email}${phone ? ` || ${phone}` : ""}`,
+  ].join("\n\n");
+
+  // If a resume was uploaded, remind the student to attach it before sending.
+  return resume.trim()
+    ? `${body}\n\n[Reminder to ${name}: attach your resume PDF in Gmail before sending.]`
+    : body;
+}
+
+// ─── PERSONALIZED MATCH SCORING ───────────────────────────────────────────────
+// Score a contact against the student's resume + interests to surface the most
+// relevant people first. Pure keyword overlap — no model required.
+const STOPWORDS = new Set([
+  "the","a","an","and","or","of","for","to","in","on","at","is","are","was","were",
+  "i","my","me","with","by","this","that","it","as","be","been","have","has","had",
+  "from","about","into","over","than","then","also","new","high","school","student",
+  "university","college","class","grade","year","work","using","used","using",
+]);
+function tokenize(s: string): string[] {
+  return (s || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter(w => w.length >= 4 && !STOPWORDS.has(w));
+}
+function scoreContact(c: Contact, studentTokens: Set<string>): number {
+  if (!studentTokens.size) return 0;
+  const haystack = `${c.field} ${c.title} ${c.institution} ${c.category}`.toLowerCase();
+  const haystackTokens = tokenize(haystack);
+  let score = 0;
+  const seen = new Set<string>();
+  for (const t of haystackTokens) {
+    if (studentTokens.has(t) && !seen.has(t)) {
+      seen.add(t);
+      // Field matches are most meaningful — weight them higher.
+      score += c.field.toLowerCase().includes(t) ? 3 : 1;
+    }
+  }
+  return score;
 }
 
 // ─── COMPONENT ────────────────────────────────────────────────────────────────
