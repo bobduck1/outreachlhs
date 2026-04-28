@@ -110,6 +110,7 @@ const css = `
   .ro-qcard { background: var(--surface); border: 2px solid var(--border); border-radius: 10px; padding: 12px 16px; display: flex; align-items: center; gap: 12px; border-left: 4px solid var(--border); flex-wrap: wrap; }
   .ro-qcard.st-pending { border-left-color: var(--muted); }
   .ro-qcard.st-done { border-left-color: var(--green); }
+  .ro-qcard.st-sent { border-left-color: var(--blue); opacity: 0.85; }
   .ro-qcard-info { flex: 1; min-width: 200px; }
   .ro-qcard-name { font-weight: 600; font-size: 0.88rem; }
   .ro-qcard-email { font-family: 'IBM Plex Mono', monospace; font-size: 0.66rem; color: var(--muted); margin-top: 2px; word-break: break-all; }
