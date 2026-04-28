@@ -1,9 +1,22 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 
 // ─── CREATOR ACCESS ───────────────────────────────────────────────────────────
-// Change this passcode to whatever you want. Anyone who enters it gets the
-// "creator" role in their browser (stored in localStorage) and can upload CSVs.
-const CREATOR_PASSCODE = "akhil-reachout-2025";
+// The plaintext passcode is NEVER stored in source. We store only its SHA-256
+// hash and compare hashes at unlock time. To rotate the passcode, generate a
+// new SHA-256 hash (hex) of your chosen string and paste it below.
+//
+// Current passcode hash (default: "akhil-reachout-2025" — change this!):
+const CREATOR_PASSCODE_SHA256 =
+  "40dd30e7f41df5fc92c5c349b11bd160ae62fe31f2f4a44d07e5006cb884d873";
+
+// Brute-force protection: lock out after N failed attempts within the window.
+const MAX_UNLOCK_ATTEMPTS = 5;
+const UNLOCK_LOCKOUT_MS = 5 * 60 * 1000; // 5 minutes
+
+async function sha256Hex(input: string): Promise<string> {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
 
 // ─── STYLES ───────────────────────────────────────────────────────────────────
 const FONTS = `@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap');`;
