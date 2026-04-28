@@ -395,7 +395,7 @@ const DEFAULT_FORM: FormState = {
 export default function ReachOut() {
   const [cat, setCat] = useState<string>("all");
   const [form, setForm] = useState<FormState>(DEFAULT_FORM);
-  const [tab, setTab] = useState<"discover" | "queue" | "log">("discover");
+  const [tab, setTab] = useState<"discover" | "queue" | "sent" | "log">("discover");
   const [baseContacts, setBaseContacts] = useState<Contact[]>([]);
   const [extraContacts, setExtraContacts] = useState<Contact[]>([]);
   const [queue, setQueue] = useState<QueueItem[]>([]);
