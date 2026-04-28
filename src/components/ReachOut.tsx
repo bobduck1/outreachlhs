@@ -428,7 +428,7 @@ export default function ReachOut() {
       if (e) setExtraContacts(JSON.parse(e));
       const q = localStorage.getItem(STORAGE_KEYS.queue);
       if (q) setQueue(JSON.parse(q));
-      if (localStorage.getItem("reachout.creator") === "1") setIsCreator(true);
+      if (localStorage.getItem("reachout.creator.session")) setIsCreator(true);
     } catch {}
   }, []);
 
