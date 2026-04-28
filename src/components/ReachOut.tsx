@@ -165,7 +165,7 @@ type FormState = {
   search: string;
 };
 
-type QueueItem = Contact & { qid: string; status: "pending" | "done"; catKey: string };
+type QueueItem = Contact & { qid: string; status: "pending" | "done" | "sent"; catKey: string; sentAt?: string };
 
 // ─── CSV PARSE (handles quoted fields) ────────────────────────────────────────
 function parseCSV(text: string): Record<string, string>[] {
