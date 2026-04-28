@@ -919,10 +919,12 @@ export default function ReachOut() {
                     </div>
                     <div className="ro-results-grid">
                       {filtered.map(r => {
-                        const inQ = queue.some(q => q.email.toLowerCase() === r.email.toLowerCase());
+                        const existing = queue.find(q => q.email.toLowerCase() === r.email.toLowerCase());
+                        const inQ = !!existing && existing.status !== "sent";
+                        const alreadySent = !!existing && existing.status === "sent";
                         return (
-                          <div key={r.id} className={`ro-card${inQ ? " selected" : ""}`}>
-                            <div className="ro-check" onClick={() => formReady && toggleSelect(r)}>{inQ ? "✓" : ""}</div>
+                          <div key={r.id} className={`ro-card${inQ ? " selected" : ""}`} style={alreadySent ? { opacity: 0.55 } : undefined}>
+                            <div className="ro-check" onClick={() => formReady && !alreadySent && toggleSelect(r)}>{inQ ? "✓" : alreadySent ? "✉" : ""}</div>
                             <div className="ro-card-info">
                               <div className="ro-card-name">{r.name}</div>
                               <div className="ro-card-inst">
@@ -933,7 +935,9 @@ export default function ReachOut() {
                             </div>
                             <div className="ro-card-right">
                               <span className="ro-cat-tag">{r.category || "general"}</span>
-                              {!inQ
+                              {alreadySent
+                                ? <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "0.62rem", color: "var(--blue)" }}>✓ already emailed</span>
+                                : !inQ
                                 ? <button className="ro-btn ro-btn-outline" style={{ padding: "5px 11px", fontSize: "0.62rem" }} onClick={() => addToQueue(r)} disabled={!formReady}>+ Queue</button>
                                 : <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "0.62rem", color: "var(--green)" }}>In queue</span>}
                             </div>
