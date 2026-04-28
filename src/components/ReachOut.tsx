@@ -867,9 +867,13 @@ export default function ReachOut() {
           {/* CONTENT */}
           <div className="ro-content">
             <div className="ro-tabs">
-              {(["discover", "queue", "log"] as const).map(t => (
+              {(["discover", "queue", "sent", "log"] as const).map(t => (
                 <div key={t} className={`ro-tab${tab === t ? " active" : ""}`} onClick={() => setTab(t)}>
-                  {t === "queue" ? <>Draft Queue <span className="ro-qbadge">{queue.length}</span></> : t.charAt(0).toUpperCase() + t.slice(1)}
+                  {t === "queue"
+                    ? <>Draft Queue <span className="ro-qbadge">{activeQueue.length}</span></>
+                    : t === "sent"
+                    ? <>Sent <span className="ro-qbadge">{qSent}</span></>
+                    : t.charAt(0).toUpperCase() + t.slice(1)}
                 </div>
               ))}
             </div>
