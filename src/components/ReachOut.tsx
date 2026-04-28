@@ -799,8 +799,8 @@ export default function ReachOut() {
           </div>
           <div className="ro-hstats">
             <div className="ro-hstat"><span className="ro-hstat-num">{allContacts.length}</span><span className="ro-hstat-lbl">Contacts</span></div>
-            <div className="ro-hstat"><span className="ro-hstat-num">{queue.length}</span><span className="ro-hstat-lbl">Queued</span></div>
-            <div className="ro-hstat"><span className="ro-hstat-num">{qDone}</span><span className="ro-hstat-lbl">Drafted</span></div>
+            <div className="ro-hstat"><span className="ro-hstat-num">{activeQueue.length}</span><span className="ro-hstat-lbl">Queued</span></div>
+            <div className="ro-hstat"><span className="ro-hstat-num">{qSent}</span><span className="ro-hstat-lbl">Sent</span></div>
           </div>
         </div>
 
