@@ -643,7 +643,12 @@ export default function ReachOut() {
     addLog(`Queued: ${contact.name} <${contact.email}>`, "ok");
   }
   function toggleSelect(c: Contact) {
-    if (queue.some(q => q.email.toLowerCase() === c.email.toLowerCase())) {
+    const existing = queue.find(q => q.email.toLowerCase() === c.email.toLowerCase());
+    if (existing) {
+      if (existing.status === "sent") {
+        addLog(`${c.name} is already marked as sent — uncheck them in the Sent tab to re-add.`, "warn");
+        return;
+      }
       setQueue(q => q.filter(x => x.email.toLowerCase() !== c.email.toLowerCase()));
       addLog(`Removed from queue: ${c.name}`, "warn");
     } else {
@@ -666,9 +671,30 @@ export default function ReachOut() {
   }
   function clearQueue() {
     if (!queue.length) return;
-    if (!confirm("Clear the entire queue?")) return;
-    setQueue([]);
-    addLog("Queue cleared.", "warn");
+    if (!confirm("Clear the entire queue (does not affect Sent tab)?")) return;
+    // Only clear non-sent items so the "already-emailed" record is preserved.
+    setQueue(q => q.filter(x => x.status === "sent"));
+    addLog("Queue cleared (sent items preserved).", "warn");
+  }
+
+  // Mark a single queue item as sent (or unmark it).
+  function markSent(qid: string) {
+    setQueue(q => q.map(x => x.qid === qid ? { ...x, status: "sent", sentAt: new Date().toISOString() } : x));
+    const c = queue.find(x => x.qid === qid);
+    if (c) addLog(`Marked sent: ${c.name}`, "ok");
+  }
+  function unmarkSent(qid: string) {
+    setQueue(q => q.map(x => x.qid === qid ? { ...x, status: "pending", sentAt: undefined } : x));
+    const c = queue.find(x => x.qid === qid);
+    if (c) addLog(`Re-opened: ${c.name} (back to pending)`, "warn");
+  }
+  function markAllSent() {
+    const toMark = queue.filter(c => c.status !== "sent");
+    if (!toMark.length) return;
+    if (!confirm(`Mark all ${toMark.length} queued contact(s) as sent? They'll move to the Sent tab and won't be re-emailed.`)) return;
+    const now = new Date().toISOString();
+    setQueue(q => q.map(x => x.status === "sent" ? x : { ...x, status: "sent", sentAt: now }));
+    addLog(`Marked ${toMark.length} contact(s) as sent.`, "ok");
   }
 
   // Gmail compose URL — opens a new draft directly in Gmail web (per-user; whoever's signed in)
