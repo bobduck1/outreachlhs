@@ -117,6 +117,10 @@ const css = `
   .ro-qcard-status { font-family: 'IBM Plex Mono', monospace; font-size: 0.66rem; white-space: nowrap; }
   .st-pending .ro-qcard-status { color: var(--muted); }
   .st-done .ro-qcard-status { color: var(--green); }
+  .st-sent .ro-qcard-status { color: var(--blue); }
+  .ro-sent-check { background: transparent; border: 2px solid var(--border); width: 22px; height: 22px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 0.75rem; transition: all 0.15s; padding: 0; color: var(--muted); }
+  .ro-sent-check:hover { border-color: var(--blue); color: var(--blue); }
+  .ro-sent-check.checked { background: var(--blue); border-color: var(--blue); color: white; }
   .ro-qcard-remove { background: none; border: none; cursor: pointer; color: var(--muted); font-size: 1.1rem; padding: 2px 5px; border-radius: 4px; line-height: 1; }
   .ro-qcard-remove:hover { color: var(--red); }
   .ro-mailto-btn { font-family: 'IBM Plex Mono', monospace; font-size: 0.62rem; color: var(--blue); background: #eef3f8; border: 1px solid #c8d8e8; border-radius: 4px; padding: 5px 10px; cursor: pointer; text-decoration: none; display: inline-block; }
