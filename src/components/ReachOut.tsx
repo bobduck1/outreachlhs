@@ -161,6 +161,7 @@ type FormState = {
   location: string;
   resume: string;          // extracted text from PDF
   resumeFileName: string;  // original filename, for display
+  interests: string;       // free-text interests (used for personalized matches)
   search: string;
 };
 
