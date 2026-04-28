@@ -409,7 +409,9 @@ export default function ReachOut() {
   const [isCreator, setIsCreator] = useState(false);
   const [showUnlock, setShowUnlock] = useState(false);
   const [unlockInput, setUnlockInput] = useState("");
+  const [unlocking, setUnlocking] = useState(false);
   const [parsingResume, setParsingResume] = useState(false);
+  const [personalized, setPersonalized] = useState(false);
 
   const addLog = useCallback((msg: string, type = "info") => {
     const ts = new Date().toLocaleTimeString();
