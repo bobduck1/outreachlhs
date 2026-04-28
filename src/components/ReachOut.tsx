@@ -781,8 +781,11 @@ export default function ReachOut() {
     addLog("Cleared uploaded contacts.", "warn");
   }
 
+  const qSent = queue.filter(c => c.status === "sent").length;
   const qDone = queue.filter(c => c.status === "done").length;
   const qPending = queue.filter(c => c.status === "pending").length;
+  const activeQueue = queue.filter(c => c.status !== "sent");
+  const sentQueue = queue.filter(c => c.status === "sent");
   const formReady = form.name.trim() && form.school.trim() && form.email.trim();
 
   return (
