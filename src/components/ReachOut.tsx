@@ -263,7 +263,8 @@ function buildBody(contact: Contact, catKey: string, info: FormState): string {
   else if (["polisci", "stem", "research"].includes(catKey)) sal = "Professor";
   const lastName = contact.name.split(" ").slice(-1)[0];
 
-  // Field-of-interest phrasing per category.
+  // Field-of-interest phrasing per category — used only if the student didn't
+  // type their own interests. We NEVER reference anything from the resume.
   const fieldPhrase: Record<string, string> = {
     polisci:     contact.field || "American politics, political behavior, and public policy",
     law:         contact.field || "the practice of law and the legal system",
@@ -291,35 +292,29 @@ function buildBody(contact: Contact, catKey: string, info: FormState): string {
 
   // Paragraph 2: reference what they actually do at their institution.
   const profileLine = (() => {
-    const parts: string[] = [];
+    const article = (contact.title && /^[aeiou]/i.test(contact.title)) ? "an" : "a";
     if (contact.title && contact.institution) {
-      parts.push(`I came across your profile at ${contact.institution} as ${/^[aeiou]/i.test(contact.title) ? "an" : "a"} ${contact.title}`);
-    } else if (contact.institution) {
-      parts.push(`I came across your work at ${contact.institution}`);
-    } else if (contact.title) {
-      parts.push(`I came across your work as ${contact.title}`);
-    } else {
-      parts.push(`I came across your work`);
+      return `I came across your profile at ${contact.institution} as ${article} ${contact.title}, and I was drawn to the department's strong emphasis on ${contact.field || "your area of work"}.`;
     }
-    if (contact.field) {
-      parts.push(`and I was drawn to your focus on ${contact.field}`);
+    if (contact.institution) {
+      return `I came across your work at ${contact.institution}, and I was drawn to the department's strong emphasis on ${contact.field || "your area of work"}.`;
     }
-    return parts.join(", ") + ".";
+    if (contact.title) {
+      return `I came across your work as ${contact.title}, and I was drawn to your focus on ${contact.field || "your area of work"}.`;
+    }
+    return `I came across your work, and I was drawn to your focus on ${contact.field || "your area of work"}.`;
   })();
 
-  // Optional light experience reference (only if a resume was provided).
-  const experience = resume.trim() ? pickExperienceSnippet(resume) : "";
-  const experienceLine = experience
-    ? ` Through my own experience — including ${experience.toLowerCase().replace(/\.$/, "")} — I have started building a foundation that I would love to expand under someone working directly in the field.`
-    : "";
+  // Connector sentence for paragraph 2 — generic, never references resume.
+  const connector = `The intersection of ${studentInterest}, which sits at the heart of how we understand the world around us, is something I think about constantly as a high school student navigating an overwhelming information environment.`;
 
-  // Closing resume line: only mention attaching if they uploaded one.
+  // Resume attachment line — only if a resume PDF was uploaded.
   const resumeAttachLine = resume.trim()
     ? ` I have attached my resume for your reference.`
     : ``;
 
   const opener = `My name is ${name}, and I am a ${grade} at ${school} in ${location}, with a strong interest in ${studentInterest}.`;
-  const para2 = `${profileLine}${experienceLine}`;
+  const para2 = `${profileLine} ${connector}`;
   const para3 = `${ask}${resumeAttachLine}`;
 
   const body = [
