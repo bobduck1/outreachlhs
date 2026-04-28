@@ -828,43 +828,6 @@ export default function ReachOut() {
               </div>
             </div>
 
-            {/* Creator-only: CSV upload */}
-            <div className="ro-sec">
-              <div className="ro-sec-lbl">{isCreator ? "🔓 Creator · Add Contacts" : "Contacts Database"}</div>
-              {isCreator ? (
-                <>
-                  <div className="ro-upload">
-                    <label htmlFor="ro-csv">📤 Upload CSV</label>
-                    <input ref={fileRef} id="ro-csv" type="file" accept=".csv,text/csv" onChange={onUploadCSV} />
-                    <p>Required: <code>name, email</code>. Optional: <code>field, institution, title, category, location</code>.</p>
-                  </div>
-                  <div style={{ marginTop: 10, display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.66rem", color: "var(--muted)", fontFamily: "'IBM Plex Mono', monospace", gap: 8, flexWrap: "wrap" }}>
-                    <span>{extraContacts.length} added by you</span>
-                    <div style={{ display: "flex", gap: 6 }}>
-                      {extraContacts.length > 0 && <button className="ro-btn ro-btn-red" style={{ padding: "5px 10px", fontSize: "0.6rem" }} onClick={clearExtras}>Clear</button>}
-                      <button className="ro-btn ro-btn-outline" style={{ padding: "5px 10px", fontSize: "0.6rem" }} onClick={lockCreator}>Lock</button>
-                    </div>
-                  </div>
-                </>
-              ) : showUnlock ? (
-                <>
-                  <div className="ro-fg">
-                    <input className="ro-inp" type="password" placeholder="Enter creator passcode" value={unlockInput} onChange={e => setUnlockInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter") tryUnlock(); }} autoFocus />
-                  </div>
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <button className="ro-btn ro-btn-dark" style={{ flex: 1, justifyContent: "center" }} onClick={tryUnlock} disabled={unlocking}>{unlocking ? "Checking…" : "Unlock"}</button>
-                    <button className="ro-btn ro-btn-outline" onClick={() => { setShowUnlock(false); setUnlockInput(""); }}>Cancel</button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <p style={{ fontSize: "0.72rem", color: "var(--muted)", lineHeight: 1.5, marginBottom: 10 }}>
-                    The contact list is curated by the creator. {extraContacts.length > 0 && <>({extraContacts.length} extras loaded.)</>}
-                  </p>
-                  <button className="ro-btn ro-btn-outline ro-btn-full" onClick={() => setShowUnlock(true)}>🔒 Creator login</button>
-                </>
-              )}
-            </div>
           </div>
 
           {/* CONTENT */}
