@@ -14,13 +14,111 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      contact_activity: {
+        Row: {
+          contact_email: string
+          id: string
+          sent_at: string
+          user_id: string
+        }
+        Insert: {
+          contact_email: string
+          id?: string
+          sent_at?: string
+          user_id: string
+        }
+        Update: {
+          contact_email?: string
+          id?: string
+          sent_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      contacts: {
+        Row: {
+          category: string | null
+          created_at: string
+          email: string
+          field: string | null
+          id: string
+          institution: string | null
+          location: string | null
+          name: string
+          source: string
+          title: string | null
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          email: string
+          field?: string | null
+          id?: string
+          institution?: string | null
+          location?: string | null
+          name: string
+          source?: string
+          title?: string | null
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          email?: string
+          field?: string | null
+          id?: string
+          institution?: string | null
+          location?: string | null
+          name?: string
+          source?: string
+          title?: string | null
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          grade: string | null
+          id: string
+          interests: string | null
+          location: string | null
+          name: string | null
+          phone: string | null
+          school: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          grade?: string | null
+          id: string
+          interests?: string | null
+          location?: string | null
+          name?: string | null
+          phone?: string | null
+          school?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          grade?: string | null
+          id?: string
+          interests?: string | null
+          location?: string | null
+          name?: string | null
+          phone?: string | null
+          school?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      contact_on_cooldown: {
+        Args: { _email: string; _for_user: string }
+        Returns: boolean
+      }
     }
     Enums: {
       [_ in never]: never
