@@ -1,22 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 
-// ─── CREATOR ACCESS ───────────────────────────────────────────────────────────
-// The plaintext passcode is NEVER stored in source. We store only its SHA-256
-// hash and compare hashes at unlock time. To rotate the passcode, generate a
-// new SHA-256 hash (hex) of your chosen string and paste it below.
-//
-// Current passcode hash (default: "akhil-reachout-2025" — change this!):
-const CREATOR_PASSCODE_SHA256 =
-  "40dd30e7f41df5fc92c5c349b11bd160ae62fe31f2f4a44d07e5006cb884d873";
-
-// Brute-force protection: lock out after N failed attempts within the window.
-const MAX_UNLOCK_ATTEMPTS = 5;
-const UNLOCK_LOCKOUT_MS = 5 * 60 * 1000; // 5 minutes
-
-async function sha256Hex(input: string): Promise<string> {
-  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
-}
 
 // ─── STYLES ───────────────────────────────────────────────────────────────────
 const FONTS = `@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap');`;
@@ -406,10 +389,6 @@ export default function ReachOut() {
   const logRef = useRef<HTMLDivElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const resumeRef = useRef<HTMLInputElement | null>(null);
-  const [isCreator, setIsCreator] = useState(false);
-  const [showUnlock, setShowUnlock] = useState(false);
-  const [unlockInput, setUnlockInput] = useState("");
-  const [unlocking, setUnlocking] = useState(false);
   const [parsingResume, setParsingResume] = useState(false);
   const [personalized, setPersonalized] = useState(false);
 
@@ -428,80 +407,10 @@ export default function ReachOut() {
       if (e) setExtraContacts(JSON.parse(e));
       const q = localStorage.getItem(STORAGE_KEYS.queue);
       if (q) setQueue(JSON.parse(q));
-      if (localStorage.getItem("reachout.creator.session")) setIsCreator(true);
     } catch {}
   }, []);
 
-  // ── CREATOR UNLOCK (hash-compared, rate-limited) ────────────────────────────
-  function getLockoutRemainingMs(): number {
-    try {
-      const raw = localStorage.getItem("reachout.creator.lockout");
-      if (!raw) return 0;
-      const { until } = JSON.parse(raw) as { until: number };
-      return Math.max(0, until - Date.now());
-    } catch { return 0; }
-  }
-  function recordFailedAttempt() {
-    try {
-      const raw = localStorage.getItem("reachout.creator.attempts");
-      const now = Date.now();
-      const arr: number[] = raw ? JSON.parse(raw) : [];
-      const recent = arr.filter(t => now - t < UNLOCK_LOCKOUT_MS);
-      recent.push(now);
-      localStorage.setItem("reachout.creator.attempts", JSON.stringify(recent));
-      if (recent.length >= MAX_UNLOCK_ATTEMPTS) {
-        localStorage.setItem(
-          "reachout.creator.lockout",
-          JSON.stringify({ until: now + UNLOCK_LOCKOUT_MS })
-        );
-      }
-    } catch {}
-  }
-  function clearAttempts() {
-    try {
-      localStorage.removeItem("reachout.creator.attempts");
-      localStorage.removeItem("reachout.creator.lockout");
-    } catch {}
-  }
-  async function tryUnlock() {
-    const remaining = getLockoutRemainingMs();
-    if (remaining > 0) {
-      addLog(`Locked out. Try again in ${Math.ceil(remaining / 1000)}s.`, "err");
-      return;
-    }
-    if (!unlockInput.trim()) return;
-    setUnlocking(true);
-    try {
-      const hashed = await sha256Hex(unlockInput.trim());
-      // Constant-time-ish compare (length is fixed for SHA-256 hex).
-      let match = hashed.length === CREATOR_PASSCODE_SHA256.length;
-      for (let i = 0; i < hashed.length; i++) {
-        if (hashed[i] !== CREATOR_PASSCODE_SHA256[i]) match = false;
-      }
-      if (match) {
-        // Store an opaque session token, NOT the passcode. Token is regenerated each unlock.
-        const token = crypto.getRandomValues(new Uint8Array(16));
-        const tokenHex = Array.from(token).map(b => b.toString(16).padStart(2, "0")).join("");
-        localStorage.setItem("reachout.creator.session", tokenHex);
-        clearAttempts();
-        setIsCreator(true);
-        setShowUnlock(false);
-        setUnlockInput("");
-        addLog("Creator mode unlocked. CSV upload available.", "ok");
-      } else {
-        recordFailedAttempt();
-        const left = MAX_UNLOCK_ATTEMPTS - JSON.parse(localStorage.getItem("reachout.creator.attempts") || "[]").length;
-        addLog(left > 0 ? `Incorrect passcode. ${left} attempt(s) left.` : "Too many failed attempts. Locked for 5 minutes.", "err");
-      }
-    } finally {
-      setUnlocking(false);
-    }
-  }
-  function lockCreator() {
-    localStorage.removeItem("reachout.creator.session");
-    setIsCreator(false);
-    addLog("Creator mode locked.", "warn");
-  }
+
 
   // ── RESUME PDF EXTRACTION (client-side via pdfjs) ───────────────────────────
   async function onUploadResume(e: React.ChangeEvent<HTMLInputElement>) {
