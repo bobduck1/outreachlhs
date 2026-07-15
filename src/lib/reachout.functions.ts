@@ -12,6 +12,7 @@ export type ContactRow = {
   field: string;
   category: string;
   location: string;
+  tier?: "high" | "medium" | "low";
 };
 
 // ─── Profile ──────────────────────────────────────────────────────────────────
@@ -106,7 +107,8 @@ export const unrecordSent = createServerFn({ method: "POST" })
 
 // ─── AI contact search ────────────────────────────────────────────────────────
 const SearchInput = z.object({
-  field: z.string().min(1).max(80),
+  field: z.string().min(1).max(120),
+  category: z.string().max(80).default(""),
   location: z.string().max(200).default(""),
   interests: z.string().max(2000).default(""),
   count: z.number().int().min(1).max(15).default(10),
@@ -119,8 +121,10 @@ type AICandidate = {
   institution: string;
   field: string;
   location: string;
+  tier: "high" | "medium" | "low";
   confidence: "high" | "medium" | "low";
 };
+
 
 export const searchContacts = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -137,28 +141,38 @@ export const searchContacts = createServerFn({ method: "POST" })
       .eq("user_id", context.userId);
     const excludedEmails = new Set((mySent ?? []).map((r: any) => r.contact_email.toLowerCase()));
 
-    const systemPrompt = `You are a research assistant helping a high-school student find real professors and professionals to email for research/mentorship opportunities.
+    const systemPrompt = `You are a research assistant helping a high-school student find real university PROFESSORS (only) to email about assisting with their research.
 
 CRITICAL RULES:
-1. Only include a contact if you are 100% confident their email address is real and correct. If you are not certain the exact email is correct, DO NOT include that person. It is much better to return 3 verified contacts than 10 guesses.
-2. Prefer institutional emails (.edu for professors, or clearly-listed public professional emails). Never guess a pattern like firstname.lastname@university.edu unless you have specifically seen that exact address published.
-3. Focus on people currently active in the field.
+1. Return ONLY currently-active university professors (assistant, associate, or full professors, or lecturers doing research). NEVER return industry professionals, attorneys, physicians in private practice, executives, or non-academic staff. Every contact must hold a faculty position at an accredited university.
+2. Only include a contact if you are 100% confident their institutional .edu email address is real and correct. If you are not certain the exact email is correct, DO NOT include that person. Never guess a pattern like firstname.lastname@university.edu unless you have specifically seen that exact address published on the university's public faculty directory.
+3. It is much better to return 3 verified professors than 10 guesses.
 4. Do not include contacts whose emails appear in the excluded list.
-5. If you cannot find enough verified contacts, return fewer — quality over quantity.
+
+TARGETING RULES (very important):
+5. Geographic preference: strongly prefer professors at universities within a reasonable driving distance of the student's location. Only include more distant schools if you cannot find enough nearby.
+6. School selectivity: strongly prefer SMALLER, less-selective, regional, or teaching-oriented universities (e.g. state directional universities, regional colleges, mid-tier private schools) where professors are more likely to respond to a high-school student. Include top-ranked/highly-selective research universities sparingly.
+
+TIER ASSIGNMENT (assign one tier per professor based on response likelihood):
+- "high"  = smaller regional/teaching-oriented schools, lecturers, junior faculty, professors known to mentor high-school students. Best odds of a reply.
+- "medium"= mid-tier universities, established professors at less-competitive research schools.
+- "low"   = top-20/Ivy-tier or extremely well-known professors where a reply is unlikely.
+Aim for a mix roughly weighted toward "high" and "medium".
 
 Return JSON with a "contacts" array. Each item:
 - name: full name
-- email: verified institutional email (lowercase)
-- title: e.g. "Professor of Political Science", "Attorney"
-- institution: university, firm, hospital, etc.
-- field: their specialty in one short phrase
+- email: verified institutional .edu email (lowercase)
+- title: e.g. "Assistant Professor of Political Science"
+- institution: university name
+- field: their specific research specialty in one short phrase
 - location: "City, State" (US) if known, else ""
+- tier: "high" | "medium" | "low" (per rules above)
 - confidence: always "high" (you only return high-confidence entries)`;
 
-    const userPrompt = `Field: ${data.field}
-${data.location ? `Preferred location: ${data.location}\n` : ""}${data.interests ? `Student's specific interests: ${data.interests}\n` : ""}Excluded emails (already contacted by this student, do not include): ${[...excludedEmails].slice(0, 200).join(", ") || "(none)"}
+    const userPrompt = `Subfield: ${data.field}
+${data.category ? `Broader area: ${data.category}\n` : ""}${data.location ? `Student location (find professors close to here): ${data.location}\n` : ""}${data.interests ? `Student's specific interests: ${data.interests}\n` : ""}Excluded emails (already contacted by this student, do not include): ${[...excludedEmails].slice(0, 200).join(", ") || "(none)"}
 
-Return up to ${data.count} real, verified contacts matching this criteria.`;
+Return up to ${data.count} real, verified university professors matching this criteria. Prioritize smaller schools near the student's location.`;
 
     const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -193,9 +207,10 @@ Return up to ${data.count} real, verified contacts matching this criteria.`;
                       institution: { type: "string" },
                       field: { type: "string" },
                       location: { type: "string" },
+                      tier: { type: "string", enum: ["high", "medium", "low"] },
                       confidence: { type: "string", enum: ["high", "medium", "low"] },
                     },
-                    required: ["name", "email", "title", "institution", "field", "location", "confidence"],
+                    required: ["name", "email", "title", "institution", "field", "location", "tier", "confidence"],
                   },
                 },
               },
@@ -241,13 +256,15 @@ Return up to ${data.count} real, verified contacts matching this criteria.`;
     // Upsert into shared contacts table via admin client. Direct authenticated
     // inserts are disallowed to prevent users from planting fake contacts.
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const tierByEmail = new Map<string, "high" | "medium" | "low">();
+    for (const c of clean) tierByEmail.set(c.email, c.tier ?? "medium");
     const rows = clean.map((c) => ({
       email: c.email,
       name: c.name,
       title: c.title || "",
       institution: c.institution || "",
       field: c.field || data.field,
-      category: data.field,
+      category: data.category || data.field,
       location: c.location || "",
       source: "ai",
     }));
@@ -262,9 +279,7 @@ Return up to ${data.count} real, verified contacts matching this criteria.`;
     }
 
     // Filter out contacts on cooldown for other users. Cooldown = 2+ other users
-    // sent to this email in the last 30 days. Uses admin client because it must
-    // read across all users' activity, which per-user RLS forbids.
-
+    // sent to this email in the last 30 days.
     const emails = (upserted ?? []).map((c: any) => c.email);
     const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
     const { data: activity } = await supabaseAdmin
@@ -295,6 +310,7 @@ Return up to ${data.count} real, verified contacts matching this criteria.`;
         field: c.field ?? "",
         category: c.category ?? "",
         location: c.location ?? "",
+        tier: tierByEmail.get(c.email) ?? "medium",
       });
     }
 

@@ -127,14 +127,63 @@ const css = `
 `;
 
 // ─── CATEGORIES ───────────────────────────────────────────────────────────────
-const CATS: Record<string, { icon: string; name: string; label: string; searchTerm: string }> = {
-  polisci:     { icon: "🏛️", name: "Political Science", label: "Political Science Professor",     searchTerm: "Political Science professors doing research" },
-  law:         { icon: "⚖️", name: "Law / Legal",       label: "Attorney / Law Professor",         searchTerm: "Law professors and attorneys" },
-  stem:        { icon: "🔬", name: "STEM Research",     label: "STEM Researcher",                  searchTerm: "STEM research professors (biology, chemistry, physics, CS)" },
-  premed:      { icon: "🏥", name: "Pre-Med / Medical", label: "Physician / Medical Researcher",   searchTerm: "Physicians and medical school faculty open to shadowing" },
-  business:    { icon: "💼", name: "Business / Finance",label: "Business Professional",            searchTerm: "Business school professors and finance professionals" },
-  engineering: { icon: "⚙️", name: "Engineering",       label: "Engineer",                         searchTerm: "Engineering professors and industry engineers" },
+type SubCat = { key: string; name: string; searchTerm: string };
+type MainCat = { icon: string; name: string; subs: SubCat[] };
+
+const CATS: Record<string, MainCat> = {
+  stem: {
+    icon: "🔬",
+    name: "STEM",
+    subs: [
+      { key: "biology",       name: "Biology",              searchTerm: "biology" },
+      { key: "biochem",       name: "Biochemistry",         searchTerm: "biochemistry" },
+      { key: "chemistry",     name: "Chemistry",            searchTerm: "chemistry" },
+      { key: "physics",       name: "Physics",              searchTerm: "physics" },
+      { key: "cs",            name: "Computer Science",     searchTerm: "computer science" },
+      { key: "mech-eng",      name: "Mechanical Engineering", searchTerm: "mechanical engineering" },
+      { key: "elec-eng",      name: "Electrical Engineering", searchTerm: "electrical engineering" },
+      { key: "civil-eng",     name: "Civil Engineering",    searchTerm: "civil engineering" },
+      { key: "bio-eng",       name: "Biomedical Engineering", searchTerm: "biomedical engineering" },
+      { key: "environmental", name: "Environmental Science", searchTerm: "environmental science" },
+      { key: "neuro",         name: "Neuroscience",         searchTerm: "neuroscience" },
+      { key: "math",          name: "Mathematics",          searchTerm: "mathematics" },
+      { key: "stats",         name: "Statistics / Data Sci", searchTerm: "statistics or data science" },
+      { key: "premed",        name: "Pre-Med / Medical Research", searchTerm: "medical school faculty doing clinical or biomedical research" },
+    ],
+  },
+  business: {
+    icon: "💼",
+    name: "Business",
+    subs: [
+      { key: "finance",        name: "Finance",           searchTerm: "finance" },
+      { key: "economics",      name: "Economics",         searchTerm: "economics" },
+      { key: "marketing",      name: "Marketing",         searchTerm: "marketing" },
+      { key: "management",     name: "Management",        searchTerm: "management" },
+      { key: "entrepreneur",   name: "Entrepreneurship",  searchTerm: "entrepreneurship" },
+      { key: "accounting",     name: "Accounting",        searchTerm: "accounting" },
+      { key: "operations",     name: "Operations / Supply Chain", searchTerm: "operations management or supply chain" },
+    ],
+  },
+  humanities: {
+    icon: "🏛️",
+    name: "Humanities",
+    subs: [
+      { key: "polisci",     name: "Political Science", searchTerm: "political science" },
+      { key: "history",     name: "History",           searchTerm: "history" },
+      { key: "philosophy",  name: "Philosophy",        searchTerm: "philosophy" },
+      { key: "english",     name: "English / Literature", searchTerm: "english literature" },
+      { key: "sociology",   name: "Sociology",         searchTerm: "sociology" },
+      { key: "psychology",  name: "Psychology",        searchTerm: "psychology" },
+      { key: "anthropology", name: "Anthropology",     searchTerm: "anthropology" },
+      { key: "law",         name: "Law / Legal Studies", searchTerm: "law or legal studies (law school professors)" },
+      { key: "linguistics", name: "Linguistics",       searchTerm: "linguistics" },
+      { key: "religion",    name: "Religious Studies", searchTerm: "religious studies" },
+    ],
+  },
 };
+
+const SUB_LOOKUP: Record<string, { mainKey: string; sub: SubCat }> = {};
+for (const [mk, m] of Object.entries(CATS)) for (const s of m.subs) SUB_LOOKUP[s.key] = { mainKey: mk, sub: s };
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 type Contact = ContactRow;
@@ -154,49 +203,32 @@ type FormState = {
 type QueueItem = Contact & { qid: string; status: "pending" | "done" | "sent"; catKey: string; sentAt?: string };
 
 // ─── EMAIL TEMPLATES ──────────────────────────────────────────────────────────
-function buildSubject(contact: Contact, catKey: string, school: string): string {
-  const map: Record<string, string> = {
-    polisci:     `High School Student Seeking Research Opportunity in ${contact.field || "Political Science"}`,
-    law:         `${school || "High School"} Student Seeking Research Involvement in Law`,
-    stem:        `High School Student Seeking Research Opportunity in ${contact.field || "STEM"}`,
-    premed:      `High School Student Seeking Medical Shadowing Opportunity`,
-    business:    `High School Student Seeking Research Involvement`,
-    engineering: `High School Student Seeking Research Opportunity in ${contact.field || "Engineering"}`,
-  };
-  return map[catKey] || `High School Student Seeking Research Opportunity in ${contact.field || "Your Field"}`;
+function buildSubject(contact: Contact, subKey: string): string {
+  const sub = SUB_LOOKUP[subKey]?.sub;
+  const fieldName = sub?.name || contact.field || "your field";
+  return `High School Student Seeking Research Opportunity in ${fieldName}`;
 }
 
-function buildBody(contact: Contact, catKey: string, info: FormState): string {
+function buildBody(contact: Contact, subKey: string, info: FormState): string {
   const { name, school, grade, email, phone, location, resume, interests } = info;
   const titleRaw = (contact.title || "").toLowerCase();
 
-  let sal = "Mr.";
-  if (titleRaw.includes("professor") || titleRaw.includes("prof")) sal = "Professor";
-  else if (titleRaw.includes("dr") || titleRaw.includes("dean") || titleRaw.includes("md") || catKey === "premed") sal = "Dr.";
-  else if (["polisci", "stem"].includes(catKey)) sal = "Professor";
+  let sal = "Professor";
+  if (titleRaw.includes("dr") && !titleRaw.includes("professor") && !titleRaw.includes("prof")) sal = "Dr.";
   const lastName = contact.name.split(" ").slice(-1)[0];
 
-  const fieldPhrase: Record<string, string> = {
-    polisci:     contact.field || "American politics, political behavior, and public policy",
-    law:         contact.field || "the practice of law and the legal system",
-    stem:        contact.field || "scientific research",
-    premed:      contact.field || "medicine and clinical practice",
-    business:    contact.field || "business and finance",
-    engineering: contact.field || "engineering",
-  };
-  const studentInterest = interests.trim() || fieldPhrase[catKey] || (contact.field || "your field");
+  const sub = SUB_LOOKUP[subKey]?.sub;
+  const fieldPhrase = contact.field || sub?.name || "your area of work";
+  const studentInterest = interests.trim() || fieldPhrase;
 
-  // Pre-med keeps shadowing; everyone else asks for research assistance.
-  const ask = catKey === "premed"
-    ? `I am reaching out to ask if there is any possibility of briefly shadowing your practice, even for a day or two. I am not seeking payment and would work entirely around your schedule.`
-    : `I am reaching out to ask if there is any way I could contribute to your research in a small, supporting capacity. I am willing to assist with background research, literature review, data organization, or any supporting tasks — whatever would be most helpful.`;
+  // Research-assist ask for EVERYONE — no shadowing.
+  const ask = `I am reaching out to ask if there is any way I could contribute to your research in a small, supporting capacity. I am willing to assist with background research, literature review, data organization, or any supporting tasks — whatever would be most helpful.`;
 
-  const article = (contact.title && /^[aeiou]/i.test(contact.title)) ? "an" : "a";
   const profileLine = contact.title && contact.institution
-    ? `I came across your profile at ${contact.institution} as ${article} ${contact.title}, and I was drawn to the department's strong emphasis on ${contact.field || "your area of work"}.`
+    ? `I came across your profile at ${contact.institution} as ${contact.title}, and I was drawn to the department's strong emphasis on ${fieldPhrase}.`
     : contact.institution
-    ? `I came across your work at ${contact.institution}, and I was drawn to its strong emphasis on ${contact.field || "your area of work"}.`
-    : `I came across your work as ${contact.title || "a professional in this field"}, and I was drawn to your focus on ${contact.field || "your area of work"}.`;
+    ? `I came across your work at ${contact.institution}, and I was drawn to its strong emphasis on ${fieldPhrase}.`
+    : `I came across your work in ${fieldPhrase}, and I was drawn to your focus in this area.`;
 
   const connector = `The intersection of ${studentInterest}, which sits at the heart of how we understand the world around us, is something I think about constantly as a high school student navigating an overwhelming information environment.`;
 
@@ -219,6 +251,7 @@ function buildBody(contact: Contact, catKey: string, info: FormState): string {
   return resume.trim() ? `${body}\n\n[Reminder to ${name}: attach your resume PDF in Gmail before sending.]` : body;
 }
 
+
 // ─── COMPONENT ────────────────────────────────────────────────────────────────
 const STORAGE_KEYS = {
   queue: "reachout.queue.v2",
@@ -232,7 +265,8 @@ const DEFAULT_FORM: FormState = {
 
 export default function ReachOut() {
   const { user } = useAuth();
-  const [cat, setCat] = useState<string>("polisci");
+  const [mainCat, setMainCat] = useState<string>("humanities");
+  const [cat, setCat] = useState<string>("polisci"); // subcategory key
   const [form, setForm] = useState<FormState>(DEFAULT_FORM);
   const [tab, setTab] = useState<"discover" | "queue" | "sent" | "log">("discover");
   const [results, setResults] = useState<Contact[]>([]);
@@ -358,18 +392,21 @@ export default function ReachOut() {
   // ── AI SEARCH ─────────────────────────────────────────────────────────────
   async function runSearch() {
     if (!user) return;
+    const lookup = SUB_LOOKUP[cat];
+    if (!lookup) { addLog("Pick a subcategory first.", "warn"); return; }
     setSearching(true);
-    addLog(`Searching for ${CATS[cat].name} contacts…`, "info");
+    addLog(`Searching for ${lookup.sub.name} professors…`, "info");
     try {
       const res = await searchContacts({ data: {
-        field: CATS[cat].searchTerm,
+        field: lookup.sub.searchTerm,
+        category: CATS[lookup.mainKey].name,
         location: form.location,
         interests: form.interests,
         count: 10,
       }});
       setResults(res.contacts);
       setLastSearchInfo({ cat, cooldownCount: res.cooldownCount });
-      addLog(`Found ${res.contacts.length} contact(s)${res.cooldownCount ? ` (${res.cooldownCount} hidden — currently claimed by other students)` : ""}.`, res.contacts.length ? "ok" : "warn");
+      addLog(`Found ${res.contacts.length} professor(s)${res.cooldownCount ? ` (${res.cooldownCount} hidden — currently claimed by other students)` : ""}.`, res.contacts.length ? "ok" : "warn");
     } catch (e: any) {
       addLog(`Search failed: ${e.message}`, "err");
     } finally {
@@ -455,7 +492,7 @@ export default function ReachOut() {
   }
 
   function gmailComposeURL(contact: QueueItem): string {
-    const subject = buildSubject(contact, contact.catKey, form.school);
+    const subject = buildSubject(contact, contact.catKey);
     const body = buildBody(contact, contact.catKey, form);
     const params = new URLSearchParams({ view: "cm", fs: "1", to: contact.email, su: subject, body });
     return `https://mail.google.com/mail/?${params.toString()}`;
@@ -511,16 +548,30 @@ export default function ReachOut() {
           {/* SIDEBAR */}
           <div className="ro-sidebar">
             <div className="ro-sec">
-              <div className="ro-sec-lbl">Field</div>
+              <div className="ro-sec-lbl">Area</div>
               <div className="ro-cat-grid">
                 {Object.entries(CATS).map(([k, v]) => (
-                  <button key={k} className={`ro-cat-btn${cat === k ? " active" : ""}`} onClick={() => setCat(k)}>
+                  <button
+                    key={k}
+                    className={`ro-cat-btn${mainCat === k ? " active" : ""}`}
+                    onClick={() => {
+                      setMainCat(k);
+                      setCat(v.subs[0].key);
+                    }}
+                  >
                     <span className="ro-cat-icon">{v.icon}</span>
                     <span className="ro-cat-name">{v.name}</span>
                   </button>
                 ))}
               </div>
+              <div className="ro-fg" style={{ marginTop: 14 }}>
+                <label className="ro-lbl">Subfield</label>
+                <select className="ro-sel" value={cat} onChange={e => setCat(e.target.value)}>
+                  {CATS[mainCat].subs.map(s => <option key={s.key} value={s.key}>{s.name}</option>)}
+                </select>
+              </div>
             </div>
+
 
             <div className="ro-sec">
               <div className="ro-sec-lbl">Your Info {savingProfile && <span style={{ fontSize: "0.55rem", color: "var(--muted)", marginLeft: "auto" }}>saving…</span>}</div>
@@ -587,24 +638,27 @@ export default function ReachOut() {
                   </div>
                 )}
                 {searching ? (
-                  <div className="ro-empty"><span className="ro-empty-icon">🔍</span><div className="ro-empty-title">Searching…</div><div className="ro-empty-sub">Finding verified contacts in {CATS[cat].name}.</div></div>
+                  <div className="ro-empty"><span className="ro-empty-icon">🔍</span><div className="ro-empty-title">Searching…</div><div className="ro-empty-sub">Finding verified professors in {SUB_LOOKUP[cat]?.sub.name || cat}.</div></div>
                 ) : results.length === 0 ? (
                   <div className="ro-empty">
-                    <span className="ro-empty-icon">{CATS[cat].icon}</span>
+                    <span className="ro-empty-icon">{CATS[mainCat].icon}</span>
                     <div className="ro-empty-title">Ready to search</div>
-                    <div className="ro-empty-sub">Pick a field, add your interests & location, then click <strong>Find Contacts</strong>. AI only returns emails it's 100% confident about.</div>
+                    <div className="ro-empty-sub">Pick a subfield, add your interests & location, then click <strong>Find Professors</strong>. AI only returns emails it's 100% confident about.</div>
                   </div>
                 ) : visibleResults.length === 0 ? (
                   <div className="ro-empty">
                     <span className="ro-empty-icon">✉️</span>
                     <div className="ro-empty-title">All results already emailed</div>
-                    <div className="ro-empty-sub">Click Find Contacts again to search for more.</div>
+                    <div className="ro-empty-sub">Click Find Professors again to search for more.</div>
                   </div>
                 ) : (
                   <>
+                    <div className="ro-notice" style={{ background: "rgba(255,180,50,0.08)", borderColor: "rgba(255,180,50,0.35)" }}>
+                      <strong>📅 Send timing:</strong> Schedule these emails for weekday mornings between 8&nbsp;AM and 12&nbsp;PM in the professor's local time. <strong>Never send on weekends</strong> — response rates drop sharply.
+                    </div>
                     <div className="ro-results-header">
                       <div className="ro-results-title">
-                        {visibleResults.length} {CATS[lastSearchInfo?.cat || cat]?.name || "matching"} contact{visibleResults.length === 1 ? "" : "s"}
+                        {visibleResults.length} {SUB_LOOKUP[lastSearchInfo?.cat || cat]?.sub.name || "matching"} professor{visibleResults.length === 1 ? "" : "s"}
                         {lastSearchInfo && lastSearchInfo.cooldownCount > 0 && (
                           <span style={{ marginLeft: 8, fontFamily: "'IBM Plex Mono', monospace", fontSize: "0.62rem", color: "var(--orange)", textTransform: "uppercase" }}>
                             {lastSearchInfo.cooldownCount} on cooldown
@@ -616,33 +670,53 @@ export default function ReachOut() {
                         <button className="ro-btn ro-btn-dark" onClick={addAllVisible} disabled={!formReady}>+ Add All to Queue</button>
                       </div>
                     </div>
-                    <div className="ro-results-grid">
-                      {visibleResults.map(r => {
-                        const existing = queue.find(q => q.email.toLowerCase() === r.email.toLowerCase());
-                        const inQ = !!existing && existing.status !== "sent";
-                        return (
-                          <div key={r.id} className={`ro-card${inQ ? " selected" : ""}`}>
-                            <div className="ro-check" onClick={() => formReady && toggleSelect(r)}>{inQ ? "✓" : ""}</div>
-                            <div className="ro-card-info">
-                              <div className="ro-card-name">{r.name}</div>
-                              <div className="ro-card-inst">{r.title}{r.title && r.institution ? " · " : ""}{r.institution}</div>
-                              <div className="ro-card-email">{r.email}</div>
-                              {r.field && <div className="ro-card-detail">{r.field}{r.location ? ` — ${r.location}` : ""}</div>}
-                            </div>
-                            <div className="ro-card-right">
-                              <span className="ro-cat-tag">{CATS[cat].name}</span>
-                              {!inQ
-                                ? <button className="ro-btn ro-btn-outline" style={{ padding: "5px 11px", fontSize: "0.62rem" }} onClick={() => addToQueue(r)} disabled={!formReady}>+ Queue</button>
-                                : <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "0.62rem", color: "var(--green)" }}>In queue</span>}
-                            </div>
+                    {(["high", "medium", "low"] as const).map(tier => {
+                      const tierResults = visibleResults.filter(r => (r.tier || "medium") === tier);
+                      if (!tierResults.length) return null;
+                      const meta = tier === "high"
+                        ? { label: "Higher chance", color: "var(--green)", note: "Smaller / regional schools, junior faculty" }
+                        : tier === "medium"
+                        ? { label: "Medium chance", color: "var(--orange)", note: "Mid-tier universities" }
+                        : { label: "Lower chance", color: "var(--red, #b23a3a)", note: "Top-ranked / very selective schools" };
+                      return (
+                        <div key={tier} style={{ marginTop: 18 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                            <span style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: "0.8rem", color: meta.color, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                              {meta.label} · {tierResults.length}
+                            </span>
+                            <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "0.6rem", color: "var(--muted)" }}>{meta.note}</span>
                           </div>
-                        );
-                      })}
-                    </div>
+                          <div className="ro-results-grid">
+                            {tierResults.map(r => {
+                              const existing = queue.find(q => q.email.toLowerCase() === r.email.toLowerCase());
+                              const inQ = !!existing && existing.status !== "sent";
+                              return (
+                                <div key={r.id} className={`ro-card${inQ ? " selected" : ""}`}>
+                                  <div className="ro-check" onClick={() => formReady && toggleSelect(r)}>{inQ ? "✓" : ""}</div>
+                                  <div className="ro-card-info">
+                                    <div className="ro-card-name">{r.name}</div>
+                                    <div className="ro-card-inst">{r.title}{r.title && r.institution ? " · " : ""}{r.institution}</div>
+                                    <div className="ro-card-email">{r.email}</div>
+                                    {r.field && <div className="ro-card-detail">{r.field}{r.location ? ` — ${r.location}` : ""}</div>}
+                                  </div>
+                                  <div className="ro-card-right">
+                                    <span className="ro-cat-tag" style={{ borderColor: meta.color, color: meta.color }}>{meta.label}</span>
+                                    {!inQ
+                                      ? <button className="ro-btn ro-btn-outline" style={{ padding: "5px 11px", fontSize: "0.62rem" }} onClick={() => addToQueue(r)} disabled={!formReady}>+ Queue</button>
+                                      : <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "0.62rem", color: "var(--green)" }}>In queue</span>}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </>
                 )}
               </div>
             )}
+
 
             {tab === "queue" && (
               <div className="ro-panel">
