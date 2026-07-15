@@ -265,7 +265,8 @@ const DEFAULT_FORM: FormState = {
 
 export default function ReachOut() {
   const { user } = useAuth();
-  const [cat, setCat] = useState<string>("polisci");
+  const [mainCat, setMainCat] = useState<string>("humanities");
+  const [cat, setCat] = useState<string>("polisci"); // subcategory key
   const [form, setForm] = useState<FormState>(DEFAULT_FORM);
   const [tab, setTab] = useState<"discover" | "queue" | "sent" | "log">("discover");
   const [results, setResults] = useState<Contact[]>([]);
