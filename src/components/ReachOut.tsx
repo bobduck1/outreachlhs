@@ -491,7 +491,7 @@ export default function ReachOut() {
   }
 
   function gmailComposeURL(contact: QueueItem): string {
-    const subject = buildSubject(contact, contact.catKey, form.school);
+    const subject = buildSubject(contact, contact.catKey);
     const body = buildBody(contact, contact.catKey, form);
     const params = new URLSearchParams({ view: "cm", fs: "1", to: contact.email, su: subject, body });
     return `https://mail.google.com/mail/?${params.toString()}`;
