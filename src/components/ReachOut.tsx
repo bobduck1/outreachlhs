@@ -548,16 +548,30 @@ export default function ReachOut() {
           {/* SIDEBAR */}
           <div className="ro-sidebar">
             <div className="ro-sec">
-              <div className="ro-sec-lbl">Field</div>
+              <div className="ro-sec-lbl">Area</div>
               <div className="ro-cat-grid">
                 {Object.entries(CATS).map(([k, v]) => (
-                  <button key={k} className={`ro-cat-btn${cat === k ? " active" : ""}`} onClick={() => setCat(k)}>
+                  <button
+                    key={k}
+                    className={`ro-cat-btn${mainCat === k ? " active" : ""}`}
+                    onClick={() => {
+                      setMainCat(k);
+                      setCat(v.subs[0].key);
+                    }}
+                  >
                     <span className="ro-cat-icon">{v.icon}</span>
                     <span className="ro-cat-name">{v.name}</span>
                   </button>
                 ))}
               </div>
+              <div className="ro-fg" style={{ marginTop: 14 }}>
+                <label className="ro-lbl">Subfield</label>
+                <select className="ro-sel" value={cat} onChange={e => setCat(e.target.value)}>
+                  {CATS[mainCat].subs.map(s => <option key={s.key} value={s.key}>{s.name}</option>)}
+                </select>
+              </div>
             </div>
+
 
             <div className="ro-sec">
               <div className="ro-sec-lbl">Your Info {savingProfile && <span style={{ fontSize: "0.55rem", color: "var(--muted)", marginLeft: "auto" }}>saving…</span>}</div>
