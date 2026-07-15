@@ -256,13 +256,15 @@ Return up to ${data.count} real, verified university professors matching this cr
     // Upsert into shared contacts table via admin client. Direct authenticated
     // inserts are disallowed to prevent users from planting fake contacts.
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const tierByEmail = new Map<string, "high" | "medium" | "low">();
+    for (const c of clean) tierByEmail.set(c.email, c.tier ?? "medium");
     const rows = clean.map((c) => ({
       email: c.email,
       name: c.name,
       title: c.title || "",
       institution: c.institution || "",
       field: c.field || data.field,
-      category: data.field,
+      category: data.category || data.field,
       location: c.location || "",
       source: "ai",
     }));
@@ -277,9 +279,7 @@ Return up to ${data.count} real, verified university professors matching this cr
     }
 
     // Filter out contacts on cooldown for other users. Cooldown = 2+ other users
-    // sent to this email in the last 30 days. Uses admin client because it must
-    // read across all users' activity, which per-user RLS forbids.
-
+    // sent to this email in the last 30 days.
     const emails = (upserted ?? []).map((c: any) => c.email);
     const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
     const { data: activity } = await supabaseAdmin
@@ -310,6 +310,7 @@ Return up to ${data.count} real, verified university professors matching this cr
         field: c.field ?? "",
         category: c.category ?? "",
         location: c.location ?? "",
+        tier: tierByEmail.get(c.email) ?? "medium",
       });
     }
 
