@@ -12,6 +12,7 @@ export type ContactRow = {
   field: string;
   category: string;
   location: string;
+  tier?: "high" | "medium" | "low";
 };
 
 // ─── Profile ──────────────────────────────────────────────────────────────────
