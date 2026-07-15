@@ -107,11 +107,23 @@ export const unrecordSent = createServerFn({ method: "POST" })
 
 // ─── AI contact search ────────────────────────────────────────────────────────
 const SearchInput = z.object({
-  field: z.string().min(1).max(80),
+  field: z.string().min(1).max(120),
+  category: z.string().max(80).default(""),
   location: z.string().max(200).default(""),
   interests: z.string().max(2000).default(""),
   count: z.number().int().min(1).max(15).default(10),
 });
+
+type AICandidate = {
+  name: string;
+  email: string;
+  title: string;
+  institution: string;
+  field: string;
+  location: string;
+  tier: "high" | "medium" | "low";
+  confidence: "high" | "medium" | "low";
+};
 
 type AICandidate = {
   name: string;
