@@ -391,18 +391,21 @@ export default function ReachOut() {
   // ── AI SEARCH ─────────────────────────────────────────────────────────────
   async function runSearch() {
     if (!user) return;
+    const lookup = SUB_LOOKUP[cat];
+    if (!lookup) { addLog("Pick a subcategory first.", "warn"); return; }
     setSearching(true);
-    addLog(`Searching for ${CATS[cat].name} contacts…`, "info");
+    addLog(`Searching for ${lookup.sub.name} professors…`, "info");
     try {
       const res = await searchContacts({ data: {
-        field: CATS[cat].searchTerm,
+        field: lookup.sub.searchTerm,
+        category: CATS[lookup.mainKey].name,
         location: form.location,
         interests: form.interests,
         count: 10,
       }});
       setResults(res.contacts);
       setLastSearchInfo({ cat, cooldownCount: res.cooldownCount });
-      addLog(`Found ${res.contacts.length} contact(s)${res.cooldownCount ? ` (${res.cooldownCount} hidden — currently claimed by other students)` : ""}.`, res.contacts.length ? "ok" : "warn");
+      addLog(`Found ${res.contacts.length} professor(s)${res.cooldownCount ? ` (${res.cooldownCount} hidden — currently claimed by other students)` : ""}.`, res.contacts.length ? "ok" : "warn");
     } catch (e: any) {
       addLog(`Search failed: ${e.message}`, "err");
     } finally {
