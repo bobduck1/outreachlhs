@@ -125,15 +125,6 @@ type AICandidate = {
   confidence: "high" | "medium" | "low";
 };
 
-type AICandidate = {
-  name: string;
-  email: string;
-  title: string;
-  institution: string;
-  field: string;
-  location: string;
-  confidence: "high" | "medium" | "low";
-};
 
 export const searchContacts = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
