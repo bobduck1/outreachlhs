@@ -240,15 +240,28 @@ Return up to ${data.count} real, verified contacts matching this criteria.`;
       .select("*");
     if (upsertErr) throw new Error(upsertErr.message);
 
-    // Filter out contacts on cooldown for other users.
+    // Filter out contacts on cooldown for other users. Cooldown = 2+ other users
+    // sent to this email in the last 30 days. Uses admin client because it must
+    // read across all users' activity, which per-user RLS forbids.
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const emails = (upserted ?? []).map((c: any) => c.email);
+    const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const { data: activity } = await supabaseAdmin
+      .from("contact_activity")
+      .select("contact_email, user_id")
+      .in("contact_email", emails)
+      .gte("sent_at", cutoff);
+    const otherUserCount = new Map<string, Set<string>>();
+    for (const a of activity ?? []) {
+      if (a.user_id === context.userId) continue;
+      if (!otherUserCount.has(a.contact_email)) otherUserCount.set(a.contact_email, new Set());
+      otherUserCount.get(a.contact_email)!.add(a.user_id);
+    }
+
     const results: ContactRow[] = [];
     let cooldownCount = 0;
     for (const c of upserted ?? []) {
-      const { data: cooldown } = await context.supabase.rpc("contact_on_cooldown", {
-        _email: c.email,
-        _for_user: context.userId,
-      });
-      if (cooldown) {
+      if ((otherUserCount.get(c.email)?.size ?? 0) >= 2) {
         cooldownCount++;
         continue;
       }
