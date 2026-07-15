@@ -115,10 +115,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      contact_on_cooldown: {
-        Args: { _email: string; _for_user: string }
-        Returns: boolean
-      }
+      [_ in never]: never
     }
     Enums: {
       [_ in never]: never

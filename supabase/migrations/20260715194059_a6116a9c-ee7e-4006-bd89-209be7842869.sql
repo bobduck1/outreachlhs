@@ -1,0 +1,1 @@
+DROP FUNCTION IF EXISTS public.contact_on_cooldown(text, uuid);
