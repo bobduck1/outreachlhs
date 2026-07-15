@@ -638,24 +638,27 @@ export default function ReachOut() {
                   </div>
                 )}
                 {searching ? (
-                  <div className="ro-empty"><span className="ro-empty-icon">🔍</span><div className="ro-empty-title">Searching…</div><div className="ro-empty-sub">Finding verified contacts in {CATS[cat].name}.</div></div>
+                  <div className="ro-empty"><span className="ro-empty-icon">🔍</span><div className="ro-empty-title">Searching…</div><div className="ro-empty-sub">Finding verified professors in {SUB_LOOKUP[cat]?.sub.name || cat}.</div></div>
                 ) : results.length === 0 ? (
                   <div className="ro-empty">
-                    <span className="ro-empty-icon">{CATS[cat].icon}</span>
+                    <span className="ro-empty-icon">{CATS[mainCat].icon}</span>
                     <div className="ro-empty-title">Ready to search</div>
-                    <div className="ro-empty-sub">Pick a field, add your interests & location, then click <strong>Find Contacts</strong>. AI only returns emails it's 100% confident about.</div>
+                    <div className="ro-empty-sub">Pick a subfield, add your interests & location, then click <strong>Find Professors</strong>. AI only returns emails it's 100% confident about.</div>
                   </div>
                 ) : visibleResults.length === 0 ? (
                   <div className="ro-empty">
                     <span className="ro-empty-icon">✉️</span>
                     <div className="ro-empty-title">All results already emailed</div>
-                    <div className="ro-empty-sub">Click Find Contacts again to search for more.</div>
+                    <div className="ro-empty-sub">Click Find Professors again to search for more.</div>
                   </div>
                 ) : (
                   <>
+                    <div className="ro-notice" style={{ background: "rgba(255,180,50,0.08)", borderColor: "rgba(255,180,50,0.35)" }}>
+                      <strong>📅 Send timing:</strong> Schedule these emails for weekday mornings between 8&nbsp;AM and 12&nbsp;PM in the professor's local time. <strong>Never send on weekends</strong> — response rates drop sharply.
+                    </div>
                     <div className="ro-results-header">
                       <div className="ro-results-title">
-                        {visibleResults.length} {CATS[lastSearchInfo?.cat || cat]?.name || "matching"} contact{visibleResults.length === 1 ? "" : "s"}
+                        {visibleResults.length} {SUB_LOOKUP[lastSearchInfo?.cat || cat]?.sub.name || "matching"} professor{visibleResults.length === 1 ? "" : "s"}
                         {lastSearchInfo && lastSearchInfo.cooldownCount > 0 && (
                           <span style={{ marginLeft: 8, fontFamily: "'IBM Plex Mono', monospace", fontSize: "0.62rem", color: "var(--orange)", textTransform: "uppercase" }}>
                             {lastSearchInfo.cooldownCount} on cooldown
@@ -667,33 +670,53 @@ export default function ReachOut() {
                         <button className="ro-btn ro-btn-dark" onClick={addAllVisible} disabled={!formReady}>+ Add All to Queue</button>
                       </div>
                     </div>
-                    <div className="ro-results-grid">
-                      {visibleResults.map(r => {
-                        const existing = queue.find(q => q.email.toLowerCase() === r.email.toLowerCase());
-                        const inQ = !!existing && existing.status !== "sent";
-                        return (
-                          <div key={r.id} className={`ro-card${inQ ? " selected" : ""}`}>
-                            <div className="ro-check" onClick={() => formReady && toggleSelect(r)}>{inQ ? "✓" : ""}</div>
-                            <div className="ro-card-info">
-                              <div className="ro-card-name">{r.name}</div>
-                              <div className="ro-card-inst">{r.title}{r.title && r.institution ? " · " : ""}{r.institution}</div>
-                              <div className="ro-card-email">{r.email}</div>
-                              {r.field && <div className="ro-card-detail">{r.field}{r.location ? ` — ${r.location}` : ""}</div>}
-                            </div>
-                            <div className="ro-card-right">
-                              <span className="ro-cat-tag">{CATS[cat].name}</span>
-                              {!inQ
-                                ? <button className="ro-btn ro-btn-outline" style={{ padding: "5px 11px", fontSize: "0.62rem" }} onClick={() => addToQueue(r)} disabled={!formReady}>+ Queue</button>
-                                : <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "0.62rem", color: "var(--green)" }}>In queue</span>}
-                            </div>
+                    {(["high", "medium", "low"] as const).map(tier => {
+                      const tierResults = visibleResults.filter(r => (r.tier || "medium") === tier);
+                      if (!tierResults.length) return null;
+                      const meta = tier === "high"
+                        ? { label: "Higher chance", color: "var(--green)", note: "Smaller / regional schools, junior faculty" }
+                        : tier === "medium"
+                        ? { label: "Medium chance", color: "var(--orange)", note: "Mid-tier universities" }
+                        : { label: "Lower chance", color: "var(--red, #b23a3a)", note: "Top-ranked / very selective schools" };
+                      return (
+                        <div key={tier} style={{ marginTop: 18 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                            <span style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: "0.8rem", color: meta.color, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                              {meta.label} · {tierResults.length}
+                            </span>
+                            <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "0.6rem", color: "var(--muted)" }}>{meta.note}</span>
                           </div>
-                        );
-                      })}
-                    </div>
+                          <div className="ro-results-grid">
+                            {tierResults.map(r => {
+                              const existing = queue.find(q => q.email.toLowerCase() === r.email.toLowerCase());
+                              const inQ = !!existing && existing.status !== "sent";
+                              return (
+                                <div key={r.id} className={`ro-card${inQ ? " selected" : ""}`}>
+                                  <div className="ro-check" onClick={() => formReady && toggleSelect(r)}>{inQ ? "✓" : ""}</div>
+                                  <div className="ro-card-info">
+                                    <div className="ro-card-name">{r.name}</div>
+                                    <div className="ro-card-inst">{r.title}{r.title && r.institution ? " · " : ""}{r.institution}</div>
+                                    <div className="ro-card-email">{r.email}</div>
+                                    {r.field && <div className="ro-card-detail">{r.field}{r.location ? ` — ${r.location}` : ""}</div>}
+                                  </div>
+                                  <div className="ro-card-right">
+                                    <span className="ro-cat-tag" style={{ borderColor: meta.color, color: meta.color }}>{meta.label}</span>
+                                    {!inQ
+                                      ? <button className="ro-btn ro-btn-outline" style={{ padding: "5px 11px", fontSize: "0.62rem" }} onClick={() => addToQueue(r)} disabled={!formReady}>+ Queue</button>
+                                      : <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "0.62rem", color: "var(--green)" }}>In queue</span>}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </>
                 )}
               </div>
             )}
+
 
             {tab === "queue" && (
               <div className="ro-panel">
