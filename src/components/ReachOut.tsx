@@ -127,14 +127,63 @@ const css = `
 `;
 
 // ─── CATEGORIES ───────────────────────────────────────────────────────────────
-const CATS: Record<string, { icon: string; name: string; label: string; searchTerm: string }> = {
-  polisci:     { icon: "🏛️", name: "Political Science", label: "Political Science Professor",     searchTerm: "Political Science professors doing research" },
-  law:         { icon: "⚖️", name: "Law / Legal",       label: "Attorney / Law Professor",         searchTerm: "Law professors and attorneys" },
-  stem:        { icon: "🔬", name: "STEM Research",     label: "STEM Researcher",                  searchTerm: "STEM research professors (biology, chemistry, physics, CS)" },
-  premed:      { icon: "🏥", name: "Pre-Med / Medical", label: "Physician / Medical Researcher",   searchTerm: "Physicians and medical school faculty open to shadowing" },
-  business:    { icon: "💼", name: "Business / Finance",label: "Business Professional",            searchTerm: "Business school professors and finance professionals" },
-  engineering: { icon: "⚙️", name: "Engineering",       label: "Engineer",                         searchTerm: "Engineering professors and industry engineers" },
+type SubCat = { key: string; name: string; searchTerm: string };
+type MainCat = { icon: string; name: string; subs: SubCat[] };
+
+const CATS: Record<string, MainCat> = {
+  stem: {
+    icon: "🔬",
+    name: "STEM",
+    subs: [
+      { key: "biology",       name: "Biology",              searchTerm: "biology" },
+      { key: "biochem",       name: "Biochemistry",         searchTerm: "biochemistry" },
+      { key: "chemistry",     name: "Chemistry",            searchTerm: "chemistry" },
+      { key: "physics",       name: "Physics",              searchTerm: "physics" },
+      { key: "cs",            name: "Computer Science",     searchTerm: "computer science" },
+      { key: "mech-eng",      name: "Mechanical Engineering", searchTerm: "mechanical engineering" },
+      { key: "elec-eng",      name: "Electrical Engineering", searchTerm: "electrical engineering" },
+      { key: "civil-eng",     name: "Civil Engineering",    searchTerm: "civil engineering" },
+      { key: "bio-eng",       name: "Biomedical Engineering", searchTerm: "biomedical engineering" },
+      { key: "environmental", name: "Environmental Science", searchTerm: "environmental science" },
+      { key: "neuro",         name: "Neuroscience",         searchTerm: "neuroscience" },
+      { key: "math",          name: "Mathematics",          searchTerm: "mathematics" },
+      { key: "stats",         name: "Statistics / Data Sci", searchTerm: "statistics or data science" },
+      { key: "premed",        name: "Pre-Med / Medical Research", searchTerm: "medical school faculty doing clinical or biomedical research" },
+    ],
+  },
+  business: {
+    icon: "💼",
+    name: "Business",
+    subs: [
+      { key: "finance",        name: "Finance",           searchTerm: "finance" },
+      { key: "economics",      name: "Economics",         searchTerm: "economics" },
+      { key: "marketing",      name: "Marketing",         searchTerm: "marketing" },
+      { key: "management",     name: "Management",        searchTerm: "management" },
+      { key: "entrepreneur",   name: "Entrepreneurship",  searchTerm: "entrepreneurship" },
+      { key: "accounting",     name: "Accounting",        searchTerm: "accounting" },
+      { key: "operations",     name: "Operations / Supply Chain", searchTerm: "operations management or supply chain" },
+    ],
+  },
+  humanities: {
+    icon: "🏛️",
+    name: "Humanities",
+    subs: [
+      { key: "polisci",     name: "Political Science", searchTerm: "political science" },
+      { key: "history",     name: "History",           searchTerm: "history" },
+      { key: "philosophy",  name: "Philosophy",        searchTerm: "philosophy" },
+      { key: "english",     name: "English / Literature", searchTerm: "english literature" },
+      { key: "sociology",   name: "Sociology",         searchTerm: "sociology" },
+      { key: "psychology",  name: "Psychology",        searchTerm: "psychology" },
+      { key: "anthropology", name: "Anthropology",     searchTerm: "anthropology" },
+      { key: "law",         name: "Law / Legal Studies", searchTerm: "law or legal studies (law school professors)" },
+      { key: "linguistics", name: "Linguistics",       searchTerm: "linguistics" },
+      { key: "religion",    name: "Religious Studies", searchTerm: "religious studies" },
+    ],
+  },
 };
+
+const SUB_LOOKUP: Record<string, { mainKey: string; sub: SubCat }> = {};
+for (const [mk, m] of Object.entries(CATS)) for (const s of m.subs) SUB_LOOKUP[s.key] = { mainKey: mk, sub: s };
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 type Contact = ContactRow;
@@ -154,49 +203,32 @@ type FormState = {
 type QueueItem = Contact & { qid: string; status: "pending" | "done" | "sent"; catKey: string; sentAt?: string };
 
 // ─── EMAIL TEMPLATES ──────────────────────────────────────────────────────────
-function buildSubject(contact: Contact, catKey: string, school: string): string {
-  const map: Record<string, string> = {
-    polisci:     `High School Student Seeking Research Opportunity in ${contact.field || "Political Science"}`,
-    law:         `${school || "High School"} Student Seeking Research Involvement in Law`,
-    stem:        `High School Student Seeking Research Opportunity in ${contact.field || "STEM"}`,
-    premed:      `High School Student Seeking Medical Shadowing Opportunity`,
-    business:    `High School Student Seeking Research Involvement`,
-    engineering: `High School Student Seeking Research Opportunity in ${contact.field || "Engineering"}`,
-  };
-  return map[catKey] || `High School Student Seeking Research Opportunity in ${contact.field || "Your Field"}`;
+function buildSubject(contact: Contact, subKey: string): string {
+  const sub = SUB_LOOKUP[subKey]?.sub;
+  const fieldName = sub?.name || contact.field || "your field";
+  return `High School Student Seeking Research Opportunity in ${fieldName}`;
 }
 
-function buildBody(contact: Contact, catKey: string, info: FormState): string {
+function buildBody(contact: Contact, subKey: string, info: FormState): string {
   const { name, school, grade, email, phone, location, resume, interests } = info;
   const titleRaw = (contact.title || "").toLowerCase();
 
-  let sal = "Mr.";
-  if (titleRaw.includes("professor") || titleRaw.includes("prof")) sal = "Professor";
-  else if (titleRaw.includes("dr") || titleRaw.includes("dean") || titleRaw.includes("md") || catKey === "premed") sal = "Dr.";
-  else if (["polisci", "stem"].includes(catKey)) sal = "Professor";
+  let sal = "Professor";
+  if (titleRaw.includes("dr") && !titleRaw.includes("professor") && !titleRaw.includes("prof")) sal = "Dr.";
   const lastName = contact.name.split(" ").slice(-1)[0];
 
-  const fieldPhrase: Record<string, string> = {
-    polisci:     contact.field || "American politics, political behavior, and public policy",
-    law:         contact.field || "the practice of law and the legal system",
-    stem:        contact.field || "scientific research",
-    premed:      contact.field || "medicine and clinical practice",
-    business:    contact.field || "business and finance",
-    engineering: contact.field || "engineering",
-  };
-  const studentInterest = interests.trim() || fieldPhrase[catKey] || (contact.field || "your field");
+  const sub = SUB_LOOKUP[subKey]?.sub;
+  const fieldPhrase = contact.field || sub?.name || "your area of work";
+  const studentInterest = interests.trim() || fieldPhrase;
 
-  // Pre-med keeps shadowing; everyone else asks for research assistance.
-  const ask = catKey === "premed"
-    ? `I am reaching out to ask if there is any possibility of briefly shadowing your practice, even for a day or two. I am not seeking payment and would work entirely around your schedule.`
-    : `I am reaching out to ask if there is any way I could contribute to your research in a small, supporting capacity. I am willing to assist with background research, literature review, data organization, or any supporting tasks — whatever would be most helpful.`;
+  // Research-assist ask for EVERYONE — no shadowing.
+  const ask = `I am reaching out to ask if there is any way I could contribute to your research in a small, supporting capacity. I am willing to assist with background research, literature review, data organization, or any supporting tasks — whatever would be most helpful.`;
 
-  const article = (contact.title && /^[aeiou]/i.test(contact.title)) ? "an" : "a";
   const profileLine = contact.title && contact.institution
-    ? `I came across your profile at ${contact.institution} as ${article} ${contact.title}, and I was drawn to the department's strong emphasis on ${contact.field || "your area of work"}.`
+    ? `I came across your profile at ${contact.institution} as ${contact.title}, and I was drawn to the department's strong emphasis on ${fieldPhrase}.`
     : contact.institution
-    ? `I came across your work at ${contact.institution}, and I was drawn to its strong emphasis on ${contact.field || "your area of work"}.`
-    : `I came across your work as ${contact.title || "a professional in this field"}, and I was drawn to your focus on ${contact.field || "your area of work"}.`;
+    ? `I came across your work at ${contact.institution}, and I was drawn to its strong emphasis on ${fieldPhrase}.`
+    : `I came across your work in ${fieldPhrase}, and I was drawn to your focus in this area.`;
 
   const connector = `The intersection of ${studentInterest}, which sits at the heart of how we understand the world around us, is something I think about constantly as a high school student navigating an overwhelming information environment.`;
 
@@ -218,6 +250,7 @@ function buildBody(contact: Contact, catKey: string, info: FormState): string {
 
   return resume.trim() ? `${body}\n\n[Reminder to ${name}: attach your resume PDF in Gmail before sending.]` : body;
 }
+
 
 // ─── COMPONENT ────────────────────────────────────────────────────────────────
 const STORAGE_KEYS = {
