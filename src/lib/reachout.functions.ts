@@ -23,7 +23,10 @@ export const getProfile = createServerFn({ method: "GET" })
       .select("*")
       .eq("id", context.userId)
       .maybeSingle();
-    if (error) throw new Error(error.message);
+    if (error) {
+      console.error("[getProfile] failed", error);
+      throw new Error("Could not load your profile. Please try again.");
+    }
     return data;
   });
 
@@ -44,7 +47,10 @@ export const saveProfile = createServerFn({ method: "POST" })
       .from("profiles")
       .update({ ...data, updated_at: new Date().toISOString() })
       .eq("id", context.userId);
-    if (error) throw new Error(error.message);
+    if (error) {
+      console.error("[saveProfile] failed", error);
+      throw new Error("Could not save your profile. Please try again.");
+    }
     return { ok: true };
   });
 
@@ -57,7 +63,10 @@ export const listMyActivity = createServerFn({ method: "GET" })
       .select("contact_email, sent_at")
       .eq("user_id", context.userId)
       .order("sent_at", { ascending: false });
-    if (error) throw new Error(error.message);
+    if (error) {
+      console.error("[listMyActivity] failed", error);
+      throw new Error("Could not load your activity. Please try again.");
+    }
     return data ?? [];
   });
 
@@ -71,7 +80,10 @@ export const recordSent = createServerFn({ method: "POST" })
         { user_id: context.userId, contact_email: data, sent_at: new Date().toISOString() },
         { onConflict: "user_id,contact_email" },
       );
-    if (error) throw new Error(error.message);
+    if (error) {
+      console.error("[recordSent] failed", error);
+      throw new Error("Could not record sent email. Please try again.");
+    }
     return { ok: true };
   });
 
@@ -84,9 +96,13 @@ export const unrecordSent = createServerFn({ method: "POST" })
       .delete()
       .eq("user_id", context.userId)
       .eq("contact_email", data);
-    if (error) throw new Error(error.message);
+    if (error) {
+      console.error("[unrecordSent] failed", error);
+      throw new Error("Could not update activity. Please try again.");
+    }
     return { ok: true };
   });
+
 
 // ─── AI contact search ────────────────────────────────────────────────────────
 const SearchInput = z.object({
