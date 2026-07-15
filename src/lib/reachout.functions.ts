@@ -23,7 +23,10 @@ export const getProfile = createServerFn({ method: "GET" })
       .select("*")
       .eq("id", context.userId)
       .maybeSingle();
-    if (error) throw new Error(error.message);
+    if (error) {
+      console.error("[getProfile] failed", error);
+      throw new Error("Could not load your profile. Please try again.");
+    }
     return data;
   });
 
@@ -44,7 +47,10 @@ export const saveProfile = createServerFn({ method: "POST" })
       .from("profiles")
       .update({ ...data, updated_at: new Date().toISOString() })
       .eq("id", context.userId);
-    if (error) throw new Error(error.message);
+    if (error) {
+      console.error("[saveProfile] failed", error);
+      throw new Error("Could not save your profile. Please try again.");
+    }
     return { ok: true };
   });
 
@@ -57,7 +63,10 @@ export const listMyActivity = createServerFn({ method: "GET" })
       .select("contact_email, sent_at")
       .eq("user_id", context.userId)
       .order("sent_at", { ascending: false });
-    if (error) throw new Error(error.message);
+    if (error) {
+      console.error("[listMyActivity] failed", error);
+      throw new Error("Could not load your activity. Please try again.");
+    }
     return data ?? [];
   });
 
@@ -71,7 +80,10 @@ export const recordSent = createServerFn({ method: "POST" })
         { user_id: context.userId, contact_email: data, sent_at: new Date().toISOString() },
         { onConflict: "user_id,contact_email" },
       );
-    if (error) throw new Error(error.message);
+    if (error) {
+      console.error("[recordSent] failed", error);
+      throw new Error("Could not record sent email. Please try again.");
+    }
     return { ok: true };
   });
 
@@ -84,9 +96,13 @@ export const unrecordSent = createServerFn({ method: "POST" })
       .delete()
       .eq("user_id", context.userId)
       .eq("contact_email", data);
-    if (error) throw new Error(error.message);
+    if (error) {
+      console.error("[unrecordSent] failed", error);
+      throw new Error("Could not update activity. Please try again.");
+    }
     return { ok: true };
   });
+
 
 // ─── AI contact search ────────────────────────────────────────────────────────
 const SearchInput = z.object({
@@ -222,7 +238,9 @@ Return up to ${data.count} real, verified contacts matching this criteria.`;
       return { contacts: [], cooldownCount: 0 };
     }
 
-    // Upsert into shared contacts table.
+    // Upsert into shared contacts table via admin client. Direct authenticated
+    // inserts are disallowed to prevent users from planting fake contacts.
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const rows = clean.map((c) => ({
       email: c.email,
       name: c.name,
@@ -234,16 +252,19 @@ Return up to ${data.count} real, verified contacts matching this criteria.`;
       source: "ai",
     }));
 
-    const { data: upserted, error: upsertErr } = await context.supabase
+    const { data: upserted, error: upsertErr } = await supabaseAdmin
       .from("contacts")
       .upsert(rows, { onConflict: "email" })
       .select("*");
-    if (upsertErr) throw new Error(upsertErr.message);
+    if (upsertErr) {
+      console.error("[searchContacts] contacts upsert failed", upsertErr);
+      throw new Error("Could not save search results. Please try again.");
+    }
 
     // Filter out contacts on cooldown for other users. Cooldown = 2+ other users
     // sent to this email in the last 30 days. Uses admin client because it must
     // read across all users' activity, which per-user RLS forbids.
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
     const emails = (upserted ?? []).map((c: any) => c.email);
     const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
     const { data: activity } = await supabaseAdmin
