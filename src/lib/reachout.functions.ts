@@ -222,7 +222,9 @@ Return up to ${data.count} real, verified contacts matching this criteria.`;
       return { contacts: [], cooldownCount: 0 };
     }
 
-    // Upsert into shared contacts table.
+    // Upsert into shared contacts table via admin client. Direct authenticated
+    // inserts are disallowed to prevent users from planting fake contacts.
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const rows = clean.map((c) => ({
       email: c.email,
       name: c.name,
@@ -234,16 +236,19 @@ Return up to ${data.count} real, verified contacts matching this criteria.`;
       source: "ai",
     }));
 
-    const { data: upserted, error: upsertErr } = await context.supabase
+    const { data: upserted, error: upsertErr } = await supabaseAdmin
       .from("contacts")
       .upsert(rows, { onConflict: "email" })
       .select("*");
-    if (upsertErr) throw new Error(upsertErr.message);
+    if (upsertErr) {
+      console.error("[searchContacts] contacts upsert failed", upsertErr);
+      throw new Error("Could not save search results. Please try again.");
+    }
 
     // Filter out contacts on cooldown for other users. Cooldown = 2+ other users
     // sent to this email in the last 30 days. Uses admin client because it must
     // read across all users' activity, which per-user RLS forbids.
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
     const emails = (upserted ?? []).map((c: any) => c.email);
     const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
     const { data: activity } = await supabaseAdmin
