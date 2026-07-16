@@ -230,6 +230,11 @@ function buildBody(contact: Contact, subKey: string, info: FormState): string {
     ? `I came across your work at ${contact.institution}, and I was drawn to its strong emphasis on ${fieldPhrase}.`
     : `I came across your work in ${fieldPhrase}, and I was drawn to your focus in this area.`;
 
+  const hook = contact.research_hook?.trim();
+  const hookLine = hook
+    ? ` I was especially interested in your work on ${hook.replace(/\.$/, "")}, which struck me as exactly the kind of question I would love to think more carefully about.`
+    : "";
+
   const connector = `The intersection of ${studentInterest}, which sits at the heart of how we understand the world around us, is something I think about constantly as a high school student navigating an overwhelming information environment.`;
 
   const resumeAttachLine = resume.trim() ? ` I have attached my resume for your reference.` : ``;
