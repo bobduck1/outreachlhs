@@ -244,7 +244,7 @@ function buildBody(contact: Contact, subKey: string, info: FormState): string {
   const body = [
     `Dear ${sal} ${lastName},`,
     opener,
-    `${profileLine} ${connector}`,
+    `${profileLine}${hookLine} ${connector}`,
     `${ask}${resumeAttachLine}`,
     `I understand this is an unusual request coming from a high school student, and I deeply appreciate any time you can spare. Even brief guidance about how to prepare for this kind of work would be meaningful to me.`,
     `Thank you very much for your consideration.`,
