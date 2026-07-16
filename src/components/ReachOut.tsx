@@ -703,6 +703,8 @@ export default function ReachOut() {
                                     <div className="ro-card-inst">{r.title}{r.title && r.institution ? " · " : ""}{r.institution}</div>
                                     <div className="ro-card-email">{r.email}</div>
                                     {r.field && <div className="ro-card-detail">{r.field}{r.location ? ` — ${r.location}` : ""}</div>}
+                                    {r.research_hook && <div className="ro-card-detail" style={{ fontStyle: "italic", opacity: 0.85 }}>Research: {r.research_hook}</div>}
+                                    {r.verification_source && <div className="ro-card-detail" style={{ fontSize: "0.6rem", opacity: 0.7 }}>Verified via {r.verification_source}</div>}
                                   </div>
                                   <div className="ro-card-right">
                                     <span className="ro-cat-tag" style={{ borderColor: meta.color, color: meta.color }}>{meta.label}</span>
