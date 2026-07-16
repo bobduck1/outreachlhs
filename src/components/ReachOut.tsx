@@ -230,6 +230,11 @@ function buildBody(contact: Contact, subKey: string, info: FormState): string {
     ? `I came across your work at ${contact.institution}, and I was drawn to its strong emphasis on ${fieldPhrase}.`
     : `I came across your work in ${fieldPhrase}, and I was drawn to your focus in this area.`;
 
+  const hook = contact.research_hook?.trim();
+  const hookLine = hook
+    ? ` I was especially interested in your work on ${hook.replace(/\.$/, "")}, which struck me as exactly the kind of question I would love to think more carefully about.`
+    : "";
+
   const connector = `The intersection of ${studentInterest}, which sits at the heart of how we understand the world around us, is something I think about constantly as a high school student navigating an overwhelming information environment.`;
 
   const resumeAttachLine = resume.trim() ? ` I have attached my resume for your reference.` : ``;
@@ -239,7 +244,7 @@ function buildBody(contact: Contact, subKey: string, info: FormState): string {
   const body = [
     `Dear ${sal} ${lastName},`,
     opener,
-    `${profileLine} ${connector}`,
+    `${profileLine}${hookLine} ${connector}`,
     `${ask}${resumeAttachLine}`,
     `I understand this is an unusual request coming from a high school student, and I deeply appreciate any time you can spare. Even brief guidance about how to prepare for this kind of work would be meaningful to me.`,
     `Thank you very much for your consideration.`,
@@ -698,6 +703,8 @@ export default function ReachOut() {
                                     <div className="ro-card-inst">{r.title}{r.title && r.institution ? " · " : ""}{r.institution}</div>
                                     <div className="ro-card-email">{r.email}</div>
                                     {r.field && <div className="ro-card-detail">{r.field}{r.location ? ` — ${r.location}` : ""}</div>}
+                                    {r.research_hook && <div className="ro-card-detail" style={{ fontStyle: "italic", opacity: 0.85 }}>Research: {r.research_hook}</div>}
+                                    {r.verification_source && <div className="ro-card-detail" style={{ fontSize: "0.6rem", opacity: 0.7 }}>Verified via {r.verification_source}</div>}
                                   </div>
                                   <div className="ro-card-right">
                                     <span className="ro-cat-tag" style={{ borderColor: meta.color, color: meta.color }}>{meta.label}</span>
