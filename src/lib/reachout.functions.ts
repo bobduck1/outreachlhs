@@ -118,15 +118,43 @@ const SearchInput = z.object({
 
 type AICandidate = {
   name: string;
-  email: string;
   title: string;
   institution: string;
   field: string;
   location: string;
   tier: "high" | "medium" | "low";
+  research_hook: string;
+};
+
+type AIVerified = AICandidate & {
+  email: string;
+  verification_source: string;
   confidence: "high" | "medium" | "low";
 };
 
+async function callGateway(apiKey: string, body: unknown) {
+  const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) {
+    const text = await resp.text();
+    if (resp.status === 429) throw new Error("Search rate-limited. Try again in a moment.");
+    if (resp.status === 402) throw new Error("AI credits exhausted. Please add credits to the workspace.");
+    throw new Error(`AI search failed [${resp.status}]: ${text.slice(0, 200)}`);
+  }
+  const json = await resp.json();
+  const content = json.choices?.[0]?.message?.content ?? "{}";
+  try {
+    return JSON.parse(content);
+  } catch {
+    throw new Error("AI returned unparseable response.");
+  }
+}
 
 export const searchContacts = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -135,131 +163,153 @@ export const searchContacts = createServerFn({ method: "POST" })
     const apiKey = process.env.LOVABLE_API_KEY;
     if (!apiKey) throw new Error("Missing LOVABLE_API_KEY");
 
-    // Get emails to exclude: current user's sent + globally cooled-down.
-    // We pass the excludes into the AI prompt so it doesn't waste slots on them.
     const { data: mySent } = await context.supabase
       .from("contact_activity")
       .select("contact_email")
       .eq("user_id", context.userId);
     const excludedEmails = new Set((mySent ?? []).map((r: any) => r.contact_email.toLowerCase()));
 
-    const systemPrompt = `You are a research assistant helping a high-school student find real university PROFESSORS (only) to email about assisting with their research.
+    // ═══ PASS 1: FIND candidates (no emails yet) ═══
+    const findSystem = `You are a research assistant helping a high-school student find real, currently-active university PROFESSORS to email about assisting with their research.
 
-CRITICAL RULES:
-1. Return ONLY currently-active university professors (assistant, associate, or full professors, or lecturers doing research). NEVER return industry professionals, attorneys, physicians in private practice, executives, or non-academic staff. Every contact must hold a faculty position at an accredited university.
-2. Only include a contact if you are 100% confident their institutional .edu email address is real and correct. If you are not certain the exact email is correct, DO NOT include that person. Never guess a pattern like firstname.lastname@university.edu unless you have specifically seen that exact address published on the university's public faculty directory.
-3. It is much better to return 3 verified professors than 10 guesses.
-4. Do not include contacts whose emails appear in the excluded list.
+RULES:
+1. Only currently-active faculty (assistant/associate/full professors or research lecturers) at accredited universities. Never industry, executives, private-practice physicians, or non-academic staff.
+2. Strongly prefer professors at universities within reasonable driving distance of the student's location. Only expand the radius if you cannot find enough nearby.
+3. Strongly prefer SMALLER, less-selective, regional, or teaching-oriented universities where professors are more likely to respond to a high-schooler. Include top-20/Ivy-tier sparingly.
+4. For each professor include a "research_hook": ONE concise, specific sentence describing their actual current research topic (not generic — mention the specific subject, e.g. "voter behavior in Latin American democracies" rather than "political science"). This will be used to personalize the outreach email.
+5. Assign a tier per professor:
+   - "high"  = small regional/teaching schools, lecturers, junior faculty — best odds of a reply.
+   - "medium"= mid-tier universities, established faculty at less-competitive research schools.
+   - "low"   = top-20/Ivy-tier or highly prominent professors — unlikely to reply.
+   Weight the mix toward "high" and "medium".
+6. Do NOT include email addresses in this pass — that is a separate step.`;
 
-TARGETING RULES (very important):
-5. Geographic preference: strongly prefer professors at universities within a reasonable driving distance of the student's location. Only include more distant schools if you cannot find enough nearby.
-6. School selectivity: strongly prefer SMALLER, less-selective, regional, or teaching-oriented universities (e.g. state directional universities, regional colleges, mid-tier private schools) where professors are more likely to respond to a high-school student. Include top-ranked/highly-selective research universities sparingly.
+    const findUser = `Subfield: ${data.field}
+${data.category ? `Broader area: ${data.category}\n` : ""}${data.location ? `Student location (find professors close to here): ${data.location}\n` : ""}${data.interests ? `Student's specific interests: ${data.interests}\n` : ""}
+Return up to ${data.count * 2} candidate professors. Better to return fewer real people than to pad the list.`;
 
-TIER ASSIGNMENT (assign one tier per professor based on response likelihood):
-- "high"  = smaller regional/teaching-oriented schools, lecturers, junior faculty, professors known to mentor high-school students. Best odds of a reply.
-- "medium"= mid-tier universities, established professors at less-competitive research schools.
-- "low"   = top-20/Ivy-tier or extremely well-known professors where a reply is unlikely.
-Aim for a mix roughly weighted toward "high" and "medium".
-
-Return JSON with a "contacts" array. Each item:
-- name: full name
-- email: verified institutional .edu email (lowercase)
-- title: e.g. "Assistant Professor of Political Science"
-- institution: university name
-- field: their specific research specialty in one short phrase
-- location: "City, State" (US) if known, else ""
-- tier: "high" | "medium" | "low" (per rules above)
-- confidence: always "high" (you only return high-confidence entries)`;
-
-    const userPrompt = `Subfield: ${data.field}
-${data.category ? `Broader area: ${data.category}\n` : ""}${data.location ? `Student location (find professors close to here): ${data.location}\n` : ""}${data.interests ? `Student's specific interests: ${data.interests}\n` : ""}Excluded emails (already contacted by this student, do not include): ${[...excludedEmails].slice(0, 200).join(", ") || "(none)"}
-
-Return up to ${data.count} real, verified university professors matching this criteria. Prioritize smaller schools near the student's location.`;
-
-    const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        response_format: {
-          type: "json_schema",
-          json_schema: {
-            name: "contacts_response",
-            strict: true,
-            schema: {
-              type: "object",
-              additionalProperties: false,
-              properties: {
-                contacts: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    additionalProperties: false,
-                    properties: {
-                      name: { type: "string" },
-                      email: { type: "string" },
-                      title: { type: "string" },
-                      institution: { type: "string" },
-                      field: { type: "string" },
-                      location: { type: "string" },
-                      tier: { type: "string", enum: ["high", "medium", "low"] },
-                      confidence: { type: "string", enum: ["high", "medium", "low"] },
-                    },
-                    required: ["name", "email", "title", "institution", "field", "location", "tier", "confidence"],
-                  },
-                },
-              },
-              required: ["contacts"],
+    const findSchema = {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        candidates: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              name: { type: "string" },
+              title: { type: "string" },
+              institution: { type: "string" },
+              field: { type: "string" },
+              location: { type: "string" },
+              tier: { type: "string", enum: ["high", "medium", "low"] },
+              research_hook: { type: "string" },
             },
+            required: ["name", "title", "institution", "field", "location", "tier", "research_hook"],
           },
         },
-      }),
-    });
+      },
+      required: ["candidates"],
+    };
 
-    if (!resp.ok) {
-      const body = await resp.text();
-      if (resp.status === 429) throw new Error("Search rate-limited. Try again in a moment.");
-      if (resp.status === 402) throw new Error("AI credits exhausted. Please add credits to the workspace.");
-      throw new Error(`AI search failed [${resp.status}]: ${body.slice(0, 200)}`);
-    }
+    const findParsed = (await callGateway(apiKey, {
+      model: "openai/gpt-5.5",
+      messages: [
+        { role: "system", content: findSystem },
+        { role: "user", content: findUser },
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: { name: "candidates_response", strict: true, schema: findSchema },
+      },
+    })) as { candidates?: AICandidate[] };
 
-    const json = await resp.json();
-    const content = json.choices?.[0]?.message?.content ?? "{}";
-    let parsed: { contacts?: AICandidate[] };
-    try {
-      parsed = JSON.parse(content);
-    } catch {
-      throw new Error("AI returned unparseable response.");
-    }
+    const candidates = (findParsed.candidates ?? []).filter(
+      (c) => c && c.name && c.institution,
+    );
+    if (!candidates.length) return { contacts: [], cooldownCount: 0 };
 
-    // Only keep high-confidence, filter excluded, dedupe by email.
+    // ═══ PASS 2: VERIFY institutional emails ═══
+    const verifySystem = `You are verifying institutional email addresses for a list of university professors.
+
+STRICT RULES:
+1. For each candidate, return the professor's institutional email address ONLY if you are confident it is the exact address published on the university's public faculty directory or the professor's personal/lab page.
+2. NEVER construct an email by guessing a pattern like "firstname.lastname@school.edu" or "flast@school.edu". If you have not specifically seen the exact address published, DROP that professor from the response.
+3. In "verification_source" name the specific published source you are drawing from: e.g. "Rowan University Political Science faculty directory", "Ramapo College faculty profile page", "professor's lab website at TCNJ". Be specific — a generic "university website" is NOT acceptable and must be dropped.
+4. Set "confidence" to "high" only if you are certain. If any doubt, drop the professor rather than lowering confidence.
+5. Return ONLY high-confidence verified professors. It is much better to return 3 verified professors than 10 with guessed addresses.
+6. Do not return professors whose emails appear in the excluded list.
+7. Preserve name, title, institution, field, location, tier, and research_hook exactly as given.`;
+
+    const verifyUser = `Candidates to verify:
+${JSON.stringify(candidates, null, 2)}
+
+Excluded emails (already contacted; drop any candidate whose verified email is in this list): ${[...excludedEmails].slice(0, 200).join(", ") || "(none)"}
+
+Return only candidates whose institutional email you can verify against a specific named public source. Aim for the highest-quality ${data.count} you can confidently verify — fewer is fine.`;
+
+    const verifySchema = {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        verified: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              name: { type: "string" },
+              email: { type: "string" },
+              title: { type: "string" },
+              institution: { type: "string" },
+              field: { type: "string" },
+              location: { type: "string" },
+              tier: { type: "string", enum: ["high", "medium", "low"] },
+              research_hook: { type: "string" },
+              verification_source: { type: "string" },
+              confidence: { type: "string", enum: ["high", "medium", "low"] },
+            },
+            required: [
+              "name", "email", "title", "institution", "field", "location",
+              "tier", "research_hook", "verification_source", "confidence",
+            ],
+          },
+        },
+      },
+      required: ["verified"],
+    };
+
+    const verifyParsed = (await callGateway(apiKey, {
+      model: "openai/gpt-5.5",
+      messages: [
+        { role: "system", content: verifySystem },
+        { role: "user", content: verifyUser },
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: { name: "verified_response", strict: true, schema: verifySchema },
+      },
+    })) as { verified?: AIVerified[] };
+
     const seen = new Set<string>();
-    const clean = (parsed.contacts ?? [])
-      .filter((c) => c && c.email && c.name && c.confidence === "high")
+    const clean = (verifyParsed.verified ?? [])
+      .filter((c) => c && c.email && c.name && c.confidence === "high" && c.verification_source && c.verification_source.length > 5)
       .map((c) => ({ ...c, email: c.email.toLowerCase().trim() }))
       .filter((c) => {
         if (excludedEmails.has(c.email)) return false;
         if (seen.has(c.email)) return false;
         seen.add(c.email);
         return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.email);
-      });
+      })
+      .slice(0, data.count);
 
-    if (!clean.length) {
-      return { contacts: [], cooldownCount: 0 };
-    }
+    if (!clean.length) return { contacts: [], cooldownCount: 0 };
 
-    // Upsert into shared contacts table via admin client. Direct authenticated
-    // inserts are disallowed to prevent users from planting fake contacts.
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const tierByEmail = new Map<string, "high" | "medium" | "low">();
-    for (const c of clean) tierByEmail.set(c.email, c.tier ?? "medium");
+    const metaByEmail = new Map<string, AIVerified>();
+    for (const c of clean) metaByEmail.set(c.email, c);
+
     const rows = clean.map((c) => ({
       email: c.email,
       name: c.name,
@@ -280,8 +330,6 @@ Return up to ${data.count} real, verified university professors matching this cr
       throw new Error("Could not save search results. Please try again.");
     }
 
-    // Filter out contacts on cooldown for other users. Cooldown = 2+ other users
-    // sent to this email in the last 30 days.
     const emails = (upserted ?? []).map((c: any) => c.email);
     const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
     const { data: activity } = await supabaseAdmin
@@ -303,6 +351,7 @@ Return up to ${data.count} real, verified university professors matching this cr
         cooldownCount++;
         continue;
       }
+      const meta = metaByEmail.get(c.email);
       results.push({
         id: c.id,
         email: c.email,
@@ -312,9 +361,12 @@ Return up to ${data.count} real, verified university professors matching this cr
         field: c.field ?? "",
         category: c.category ?? "",
         location: c.location ?? "",
-        tier: tierByEmail.get(c.email) ?? "medium",
+        tier: meta?.tier ?? "medium",
+        research_hook: meta?.research_hook,
+        verification_source: meta?.verification_source,
       });
     }
 
     return { contacts: results, cooldownCount };
   });
+
