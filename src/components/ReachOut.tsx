@@ -611,7 +611,7 @@ export default function ReachOut() {
                 <textarea className="ro-ta" rows={3} value={form.interests} onChange={e => setField("interests", e.target.value)} placeholder="e.g. constitutional law, voting behavior, media's role in politics" />
               </div>
               <button className="ro-btn ro-btn-dark ro-btn-full" onClick={runSearch} disabled={searching || !user}>
-                {searching ? "🔍 Searching…" : `🔍 Find ${CATS[cat].name} Contacts`}
+                {searching ? "🔍 Searching…" : `🔍 Find ${SUB_LOOKUP[cat]?.sub.name || "matching"} Contacts`}
               </button>
             </div>
           </div>
