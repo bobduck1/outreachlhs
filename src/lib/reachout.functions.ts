@@ -13,6 +13,8 @@ export type ContactRow = {
   category: string;
   location: string;
   tier?: "high" | "medium" | "low";
+  research_hook?: string;
+  verification_source?: string;
 };
 
 // ─── Profile ──────────────────────────────────────────────────────────────────
