@@ -278,6 +278,8 @@ export default function ReachOut() {
   const [results, setResults] = useState<Contact[]>([]);
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [sentEmails, setSentEmails] = useState<Set<string>>(new Set());
+  type RespStatus = "pending" | "no_response" | "declined" | "accepted" | "other";
+  const [responseStatuses, setResponseStatuses] = useState<Record<string, RespStatus>>({});
   const [searching, setSearching] = useState(false);
   const [lastSearchInfo, setLastSearchInfo] = useState<{ cat: string; cooldownCount: number } | null>(null);
   const [logs, setLogs] = useState<{ ts: string; msg: string; type: string }[]>([
