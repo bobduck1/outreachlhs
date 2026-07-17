@@ -143,9 +143,10 @@ async function callGateway(apiKey: string, body: unknown) {
   });
   if (!resp.ok) {
     const text = await resp.text();
+    console.error("[callGateway] AI gateway error", resp.status, text);
     if (resp.status === 429) throw new Error("Search rate-limited. Try again in a moment.");
     if (resp.status === 402) throw new Error("AI credits exhausted. Please add credits to the workspace.");
-    throw new Error(`AI search failed [${resp.status}]: ${text.slice(0, 200)}`);
+    throw new Error("AI search failed. Please try again.");
   }
   const json = await resp.json();
   const content = json.choices?.[0]?.message?.content ?? "{}";
