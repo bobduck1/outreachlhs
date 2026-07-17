@@ -336,6 +336,11 @@ export default function ReachOut() {
         }
         const acts = await listMyActivity();
         setSentEmails(new Set(acts.map((a: any) => a.contact_email.toLowerCase())));
+        const statusMap: Record<string, RespStatus> = {};
+        for (const a of acts as any[]) {
+          statusMap[a.contact_email.toLowerCase()] = (a.response_status || "pending") as RespStatus;
+        }
+        setResponseStatuses(statusMap);
         addLog(`Signed in as ${user.email}. Loaded ${acts.length} sent record(s).`, "ok");
       } catch (e: any) {
         addLog(`Failed to load profile: ${e.message}`, "err");
