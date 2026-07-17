@@ -8,6 +8,7 @@ import {
   recordSent,
   unrecordSent,
   searchContacts,
+  setResponseStatus,
   type ContactRow,
 } from "@/lib/reachout.functions";
 
@@ -277,6 +278,8 @@ export default function ReachOut() {
   const [results, setResults] = useState<Contact[]>([]);
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [sentEmails, setSentEmails] = useState<Set<string>>(new Set());
+  type RespStatus = "pending" | "no_response" | "declined" | "accepted" | "other";
+  const [responseStatuses, setResponseStatuses] = useState<Record<string, RespStatus>>({});
   const [searching, setSearching] = useState(false);
   const [lastSearchInfo, setLastSearchInfo] = useState<{ cat: string; cooldownCount: number } | null>(null);
   const [logs, setLogs] = useState<{ ts: string; msg: string; type: string }[]>([
@@ -333,6 +336,11 @@ export default function ReachOut() {
         }
         const acts = await listMyActivity();
         setSentEmails(new Set(acts.map((a: any) => a.contact_email.toLowerCase())));
+        const statusMap: Record<string, RespStatus> = {};
+        for (const a of acts as any[]) {
+          statusMap[a.contact_email.toLowerCase()] = (a.response_status || "pending") as RespStatus;
+        }
+        setResponseStatuses(statusMap);
         addLog(`Signed in as ${user.email}. Loaded ${acts.length} sent record(s).`, "ok");
       } catch (e: any) {
         addLog(`Failed to load profile: ${e.message}`, "err");
@@ -464,10 +472,23 @@ export default function ReachOut() {
     try {
       await recordSent({ data: c.email });
       setSentEmails(s => new Set([...s, c.email.toLowerCase()]));
+      setResponseStatuses(r => ({ ...r, [c.email.toLowerCase()]: "pending" }));
       setQueue(q => q.map(x => x.qid === qid ? { ...x, status: "sent", sentAt: new Date().toISOString() } : x));
       addLog(`Marked sent: ${c.name}`, "ok");
     } catch (e: any) {
       addLog(`Failed to record: ${e.message}`, "err");
+    }
+  }
+
+  async function updateResponseStatus(email: string, status: RespStatus) {
+    const key = email.toLowerCase();
+    const prev = responseStatuses[key] || "pending";
+    setResponseStatuses(r => ({ ...r, [key]: status }));
+    try {
+      await setResponseStatus({ data: { email, status } });
+    } catch (e: any) {
+      setResponseStatuses(r => ({ ...r, [key]: prev }));
+      addLog(`Failed to update status: ${e.message}`, "err");
     }
   }
   async function unmarkSent(qid: string) {
@@ -476,6 +497,7 @@ export default function ReachOut() {
     try {
       await unrecordSent({ data: c.email });
       setSentEmails(s => { const n = new Set(s); n.delete(c.email.toLowerCase()); return n; });
+      setResponseStatuses(r => { const n = { ...r }; delete n[c.email.toLowerCase()]; return n; });
       setQueue(q => q.map(x => x.qid === qid ? { ...x, status: "pending", sentAt: undefined } : x));
       addLog(`Re-opened: ${c.name}`, "warn");
     } catch (e: any) {
@@ -491,6 +513,11 @@ export default function ReachOut() {
       try { await recordSent({ data: c.email }); ok++; } catch {}
     }
     setSentEmails(s => new Set([...s, ...toMark.map(c => c.email.toLowerCase())]));
+    setResponseStatuses(r => {
+      const n = { ...r };
+      for (const c of toMark) if (!n[c.email.toLowerCase()]) n[c.email.toLowerCase()] = "pending";
+      return n;
+    });
     const now = new Date().toISOString();
     setQueue(q => q.map(x => x.status === "sent" ? x : { ...x, status: "sent", sentAt: now }));
     addLog(`Marked ${ok} contact(s) as sent.`, "ok");
@@ -770,13 +797,31 @@ export default function ReachOut() {
               </div>
             )}
 
-            {tab === "sent" && (
+            {tab === "sent" && (() => {
+              const statusList = Object.values(responseStatuses);
+              const totalSent = sentEmails.size;
+              const accepted = statusList.filter(s => s === "accepted").length;
+              const declined = statusList.filter(s => s === "declined").length;
+              const noResp = statusList.filter(s => s === "no_response").length;
+              const other = statusList.filter(s => s === "other").length;
+              const replied = accepted + declined + other;
+              const STATUS_OPTIONS: { key: RespStatus; label: string; color: string }[] = [
+                { key: "pending",     label: "Waiting",     color: "var(--muted)" },
+                { key: "no_response", label: "No response", color: "var(--orange)" },
+                { key: "declined",    label: "Said no",     color: "var(--red)" },
+                { key: "accepted",    label: "Said yes",    color: "var(--green)" },
+                { key: "other",       label: "Other",       color: "var(--blue)" },
+              ];
+              return (
               <div className="ro-panel">
                 <div className="ro-stats-row">
-                  <div className="ro-stat-card s-green"><span className="ro-stat-num">{sentEmails.size}</span><span className="ro-stat-lbl">Already Emailed</span></div>
+                  <div className="ro-stat-card"><span className="ro-stat-num">{totalSent}</span><span className="ro-stat-lbl">Sent</span></div>
+                  <div className="ro-stat-card s-green"><span className="ro-stat-num">{accepted}</span><span className="ro-stat-lbl">Said Yes</span></div>
+                  <div className="ro-stat-card s-orange"><span className="ro-stat-num">{replied}</span><span className="ro-stat-lbl">Replied</span></div>
+                  <div className="ro-stat-card"><span className="ro-stat-num">{noResp}</span><span className="ro-stat-lbl">No Response</span></div>
                 </div>
                 <div className="ro-notice">
-                  These contacts are hidden from future searches. They stay in your account so you never re-email the same person. If 2 students email the same contact, they're hidden from other students for 30 days.
+                  Track how each professor responded. Click a status button next to each contact — it's saved automatically. Contacts stay hidden from future searches once marked sent.
                 </div>
                 {sentQueue.length === 0 ? (
                   <div className="ro-empty">
@@ -786,21 +831,50 @@ export default function ReachOut() {
                   </div>
                 ) : (
                   <div className="ro-qlist">
-                    {sentQueue.map(c => (
-                      <div key={c.qid} className="ro-qcard st-sent">
+                    {sentQueue.map(c => {
+                      const current = responseStatuses[c.email.toLowerCase()] || "pending";
+                      const currentMeta = STATUS_OPTIONS.find(o => o.key === current)!;
+                      return (
+                      <div key={c.qid} className="ro-qcard st-sent" style={{ borderLeftColor: currentMeta.color, alignItems: "flex-start" }}>
                         <button type="button" className="ro-sent-check checked" onClick={() => unmarkSent(c.qid)} title="Un-mark sent">✓</button>
-                        <div className="ro-qcard-info">
-                          <div className="ro-qcard-name">{c.name} <span className="ro-cat-tag">{c.catKey}</span></div>
-                          <div className="ro-qcard-email">{c.email}</div>
+                        <div className="ro-qcard-info" style={{ minWidth: 200 }}>
+                          <div className="ro-qcard-name">
+                            {c.name} <span className="ro-cat-tag">{c.catKey}</span>
+                            <span className="ro-cat-tag" style={{ marginLeft: 6, borderColor: currentMeta.color, color: currentMeta.color, background: "transparent", border: `1px solid ${currentMeta.color}` }}>{currentMeta.label}</span>
+                          </div>
+                          <div className="ro-qcard-email">{c.email}{c.sentAt ? ` · sent ${new Date(c.sentAt).toLocaleDateString()}` : ""}</div>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 8 }}>
+                            {STATUS_OPTIONS.map(opt => {
+                              const active = opt.key === current;
+                              return (
+                                <button
+                                  key={opt.key}
+                                  type="button"
+                                  onClick={() => updateResponseStatus(c.email, opt.key)}
+                                  className="ro-btn"
+                                  style={{
+                                    padding: "4px 10px",
+                                    fontSize: "0.6rem",
+                                    background: active ? opt.color : "transparent",
+                                    color: active ? "#fff" : opt.color,
+                                    borderColor: opt.color,
+                                  }}
+                                >
+                                  {opt.label}
+                                </button>
+                              );
+                            })}
+                          </div>
                         </div>
-                        <span className="ro-qcard-status">✓ sent{c.sentAt ? ` · ${new Date(c.sentAt).toLocaleDateString()}` : ""}</span>
                         <button className="ro-qcard-remove" onClick={() => removeFromQueue(c.qid)} title="Remove from queue view">×</button>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
-            )}
+              );
+            })()}
 
             {tab === "log" && (
               <div className="ro-panel">

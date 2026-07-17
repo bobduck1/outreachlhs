@@ -18,18 +18,21 @@ export type Database = {
         Row: {
           contact_email: string
           id: string
+          response_status: string
           sent_at: string
           user_id: string
         }
         Insert: {
           contact_email: string
           id?: string
+          response_status?: string
           sent_at?: string
           user_id: string
         }
         Update: {
           contact_email?: string
           id?: string
+          response_status?: string
           sent_at?: string
           user_id?: string
         }

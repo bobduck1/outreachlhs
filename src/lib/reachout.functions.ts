@@ -63,7 +63,7 @@ export const listMyActivity = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const { data, error } = await context.supabase
       .from("contact_activity")
-      .select("contact_email, sent_at")
+      .select("contact_email, sent_at, response_status")
       .eq("user_id", context.userId)
       .order("sent_at", { ascending: false });
     if (error) {
@@ -71,6 +71,27 @@ export const listMyActivity = createServerFn({ method: "GET" })
       throw new Error("Could not load your activity. Please try again.");
     }
     return data ?? [];
+  });
+
+const ResponseStatusInput = z.object({
+  email: z.string().email(),
+  status: z.enum(["pending", "no_response", "declined", "accepted", "other"]),
+});
+
+export const setResponseStatus = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => ResponseStatusInput.parse(input))
+  .handler(async ({ data, context }) => {
+    const { error } = await context.supabase
+      .from("contact_activity")
+      .update({ response_status: data.status })
+      .eq("user_id", context.userId)
+      .eq("contact_email", data.email);
+    if (error) {
+      console.error("[setResponseStatus] failed", error);
+      throw new Error("Could not update response status. Please try again.");
+    }
+    return { ok: true };
   });
 
 export const recordSent = createServerFn({ method: "POST" })
