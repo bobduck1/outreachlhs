@@ -513,6 +513,11 @@ export default function ReachOut() {
       try { await recordSent({ data: c.email }); ok++; } catch {}
     }
     setSentEmails(s => new Set([...s, ...toMark.map(c => c.email.toLowerCase())]));
+    setResponseStatuses(r => {
+      const n = { ...r };
+      for (const c of toMark) if (!n[c.email.toLowerCase()]) n[c.email.toLowerCase()] = "pending";
+      return n;
+    });
     const now = new Date().toISOString();
     setQueue(q => q.map(x => x.status === "sent" ? x : { ...x, status: "sent", sentAt: now }));
     addLog(`Marked ${ok} contact(s) as sent.`, "ok");
