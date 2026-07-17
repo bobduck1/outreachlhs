@@ -1,46 +1,39 @@
 ## Goal
 
-Get the returned professor emails as close to 100% real as possible, and personalize each draft with a short mention of that professor's actual research.
+Let students record how each professor responded after they emailed them: no response yet, responded (no), responded (yes), or responded (other/neutral). Surface those statuses in the Log so the student can see their hit rate.
 
-## On your SMTP/MX question
+## Data model
 
-Real mailbox verification is harder than it sounds:
+Add one nullable text column to the existing `contact_activity` table: `response_status`, with allowed values `pending` | `no_response` | `declined` | `accepted` | `other`. Default `pending` so every existing "sent" row keeps working with no backfill needed. No new table, no new RLS work — the row is already user-scoped.
 
-- **MX check** (does the domain accept mail at all?) — trivial, one DNS lookup per email. But every `.edu` passes it, so it barely filters anything. Low value.
-- **SMTP RCPT check** (does this specific mailbox exist?) — the actually useful check, but universities almost universally block it: they either accept every address (catch-all) or refuse the probe from cloud IPs, and doing it from a serverless worker gets our IP blacklisted fast. Also requires outbound port 25, which Cloudflare Workers don't allow. So in this stack it's effectively not doable without a paid third-party verification API (Hunter, NeverBounce, ZeroBounce — ~$0.005/email).
+## Server functions (`src/lib/reachout.functions.ts`)
 
-**Most accurate approach available to us without adding a paid service:** upgrade the AI to a stronger model and make it do a two-pass "find, then verify" flow where each address has to be justifiable from the university's public faculty directory. This is what actually moves the needle — the current failure mode is the AI *guessing* `firstname.lastname@school.edu` patterns, not bad domains.
+- `listMyActivity` — extend the select to include `response_status`.
+- New `setResponseStatus({ email, status })` — validates `status`, updates the row for the current user's `(user_id, contact_email)`, returns `{ ok: true }`. Uses `requireSupabaseAuth`. Same error-handling shape as the other mutations.
 
-## Plan
+## UI (`src/components/ReachOut.tsx`)
 
-### 1. Upgrade the search model
-In `src/lib/reachout.functions.ts`, switch `searchContacts` from `google/gemini-2.5-flash` to `openai/gpt-5.5`. Stronger recall of real faculty pages and much better at refusing when uncertain.
+In the **Log / Sent tab**, next to each sent contact add a compact status control (segmented buttons or a small select) with five options:
 
-### 2. Two-pass verification inside `searchContacts`
-Same server function, one extra AI call:
+- Waiting
+- No response
+- Said no
+- Said yes
+- Other
 
-- **Pass 1 — Find:** ask for up to 2× the requested count of candidate professors matching the subfield / location / smaller-school preference. Include name, institution, department, and — critically — a one-sentence description of their actual current research.
-- **Pass 2 — Verify:** feed the candidates back to the model with a strict instruction: "For each candidate, return the professor's institutional email ONLY if you can name the specific university faculty directory page it appears on. If you cannot, drop them. Never construct an email from a name+domain pattern." Return `verificationSource` per contact.
-- Drop anything without a verification source. Keep dropping until we hit the requested count or run out of candidates (return fewer rather than pad with guesses).
-- Keep the existing tier assignment, dedupe, cooldown, and Supabase upsert logic untouched.
+Selecting one calls `setResponseStatus` and optimistically updates local state. Show the current status as a small colored pill on the row (green = yes, red = no, gray = waiting, muted = no response / other).
 
-### 3. Per-contact research hook for drafts
-Store the professor's specific research sentence (already captured in Pass 1) on the contact row returned to the client, and in `src/components/ReachOut.tsx` weave a one-line reference into `buildBody` — e.g. *"I was especially interested in your work on {research_hook}, since ..."* — right before the existing research-assistance ask. Falls back gracefully to the current generic line when a hook isn't available.
+At the top of the Log tab, show a tiny summary line: `X sent · Y replied · Z said yes`. Nothing fancy, just a quick hit-rate readout.
 
-### 4. UI transparency
-Small text under each result: *"Verified via {verificationSource}"* so the student can sanity-check before sending, and so a wrong source is visible instead of invisible.
+No changes to the search flow, draft queue, or email template.
 
-### 5. No schema changes
-`research_hook` and `verificationSource` are transient — carried on the in-memory `ContactRow` returned from the server function and used by the draft builder. Nothing new to migrate.
+## Trade-offs
 
-## Trade-offs to know
-
-- Two passes + stronger model → each search costs more AI credits and takes a few seconds longer. Worth it for accuracy.
-- You will sometimes get fewer than 10 results per search (e.g. 6–8). That's the point — better to return 6 real professors than 10 with 3 guesses.
-- If you later want true near-100% deliverability, the next step would be adding NeverBounce/Hunter as a paid verification step. I'd only add that once you've seen how the two-pass flow performs.
+- Statuses are self-reported; there's no inbox reading. That's fine — matches how the rest of the tool works, and avoids the Gmail-API scope you already decided against.
+- Keeping it on `contact_activity` (rather than a new `responses` table) means one status per user per contact, which is the right shape here.
 
 ## Technical details
 
-- **Files changed:** `src/lib/reachout.functions.ts` (model + two-pass verification + return `research_hook`, `verification_source`), `src/components/ReachOut.tsx` (use `research_hook` in `buildBody`, render `verification_source` in the result cards). Types in `ContactRow` gain two optional string fields.
-- **Model:** `openai/gpt-5.5` via existing Lovable AI Gateway call. Keep the strict `json_schema` response format; extend the schema with `research_hook` and `verification_source`.
-- **No DB migration, no new secrets, no new packages.**
+- **Migration:** add `response_status text not null default 'pending'` with a check constraint on the five allowed values.
+- **Files changed:** `src/lib/reachout.functions.ts` (extend select, add `setResponseStatus`), `src/components/ReachOut.tsx` (status control + summary in the Log tab, wire up the new server fn, extend the activity type).
+- **No new packages, no new secrets.**
