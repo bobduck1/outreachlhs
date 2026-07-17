@@ -472,6 +472,18 @@ export default function ReachOut() {
     try {
       await recordSent({ data: c.email });
       setSentEmails(s => new Set([...s, c.email.toLowerCase()]));
+      setResponseStatuses(r => ({ ...r, [c.email.toLowerCase()]: "pending" }));
+      setQueue(q => q.map(x => x.qid === qid ? { ...x, status: "sent", sentAt: new Date().toISOString() } : x));
+      addLog(`Marked sent: ${c.name}`, "ok");
+    } catch (e: any) {
+      addLog(`Failed to record: ${e.message}`, "err");
+    }
+  }
+    const c = queue.find(x => x.qid === qid);
+    if (!c) return;
+    try {
+      await recordSent({ data: c.email });
+      setSentEmails(s => new Set([...s, c.email.toLowerCase()]));
       setQueue(q => q.map(x => x.qid === qid ? { ...x, status: "sent", sentAt: new Date().toISOString() } : x));
       addLog(`Marked sent: ${c.name}`, "ok");
     } catch (e: any) {
