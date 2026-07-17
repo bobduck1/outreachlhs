@@ -497,6 +497,7 @@ export default function ReachOut() {
     try {
       await unrecordSent({ data: c.email });
       setSentEmails(s => { const n = new Set(s); n.delete(c.email.toLowerCase()); return n; });
+      setResponseStatuses(r => { const n = { ...r }; delete n[c.email.toLowerCase()]; return n; });
       setQueue(q => q.map(x => x.qid === qid ? { ...x, status: "pending", sentAt: undefined } : x));
       addLog(`Re-opened: ${c.name}`, "warn");
     } catch (e: any) {
