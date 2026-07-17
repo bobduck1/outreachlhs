@@ -797,13 +797,31 @@ export default function ReachOut() {
               </div>
             )}
 
-            {tab === "sent" && (
+            {tab === "sent" && (() => {
+              const statusList = Object.values(responseStatuses);
+              const totalSent = sentEmails.size;
+              const accepted = statusList.filter(s => s === "accepted").length;
+              const declined = statusList.filter(s => s === "declined").length;
+              const noResp = statusList.filter(s => s === "no_response").length;
+              const other = statusList.filter(s => s === "other").length;
+              const replied = accepted + declined + other;
+              const STATUS_OPTIONS: { key: RespStatus; label: string; color: string }[] = [
+                { key: "pending",     label: "Waiting",     color: "var(--muted)" },
+                { key: "no_response", label: "No response", color: "var(--orange)" },
+                { key: "declined",    label: "Said no",     color: "var(--red)" },
+                { key: "accepted",    label: "Said yes",    color: "var(--green)" },
+                { key: "other",       label: "Other",       color: "var(--blue)" },
+              ];
+              return (
               <div className="ro-panel">
                 <div className="ro-stats-row">
-                  <div className="ro-stat-card s-green"><span className="ro-stat-num">{sentEmails.size}</span><span className="ro-stat-lbl">Already Emailed</span></div>
+                  <div className="ro-stat-card"><span className="ro-stat-num">{totalSent}</span><span className="ro-stat-lbl">Sent</span></div>
+                  <div className="ro-stat-card s-green"><span className="ro-stat-num">{accepted}</span><span className="ro-stat-lbl">Said Yes</span></div>
+                  <div className="ro-stat-card s-orange"><span className="ro-stat-num">{replied}</span><span className="ro-stat-lbl">Replied</span></div>
+                  <div className="ro-stat-card"><span className="ro-stat-num">{noResp}</span><span className="ro-stat-lbl">No Response</span></div>
                 </div>
                 <div className="ro-notice">
-                  These contacts are hidden from future searches. They stay in your account so you never re-email the same person. If 2 students email the same contact, they're hidden from other students for 30 days.
+                  Track how each professor responded. Click a status button next to each contact — it's saved automatically. Contacts stay hidden from future searches once marked sent.
                 </div>
                 {sentQueue.length === 0 ? (
                   <div className="ro-empty">
@@ -813,21 +831,50 @@ export default function ReachOut() {
                   </div>
                 ) : (
                   <div className="ro-qlist">
-                    {sentQueue.map(c => (
-                      <div key={c.qid} className="ro-qcard st-sent">
+                    {sentQueue.map(c => {
+                      const current = responseStatuses[c.email.toLowerCase()] || "pending";
+                      const currentMeta = STATUS_OPTIONS.find(o => o.key === current)!;
+                      return (
+                      <div key={c.qid} className="ro-qcard st-sent" style={{ borderLeftColor: currentMeta.color, alignItems: "flex-start" }}>
                         <button type="button" className="ro-sent-check checked" onClick={() => unmarkSent(c.qid)} title="Un-mark sent">✓</button>
-                        <div className="ro-qcard-info">
-                          <div className="ro-qcard-name">{c.name} <span className="ro-cat-tag">{c.catKey}</span></div>
-                          <div className="ro-qcard-email">{c.email}</div>
+                        <div className="ro-qcard-info" style={{ minWidth: 200 }}>
+                          <div className="ro-qcard-name">
+                            {c.name} <span className="ro-cat-tag">{c.catKey}</span>
+                            <span className="ro-cat-tag" style={{ marginLeft: 6, borderColor: currentMeta.color, color: currentMeta.color, background: "transparent", border: `1px solid ${currentMeta.color}` }}>{currentMeta.label}</span>
+                          </div>
+                          <div className="ro-qcard-email">{c.email}{c.sentAt ? ` · sent ${new Date(c.sentAt).toLocaleDateString()}` : ""}</div>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 8 }}>
+                            {STATUS_OPTIONS.map(opt => {
+                              const active = opt.key === current;
+                              return (
+                                <button
+                                  key={opt.key}
+                                  type="button"
+                                  onClick={() => updateResponseStatus(c.email, opt.key)}
+                                  className="ro-btn"
+                                  style={{
+                                    padding: "4px 10px",
+                                    fontSize: "0.6rem",
+                                    background: active ? opt.color : "transparent",
+                                    color: active ? "#fff" : opt.color,
+                                    borderColor: opt.color,
+                                  }}
+                                >
+                                  {opt.label}
+                                </button>
+                              );
+                            })}
+                          </div>
                         </div>
-                        <span className="ro-qcard-status">✓ sent{c.sentAt ? ` · ${new Date(c.sentAt).toLocaleDateString()}` : ""}</span>
                         <button className="ro-qcard-remove" onClick={() => removeFromQueue(c.qid)} title="Remove from queue view">×</button>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
-            )}
+              );
+            })()}
 
             {tab === "log" && (
               <div className="ro-panel">
