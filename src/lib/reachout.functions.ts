@@ -236,7 +236,7 @@ Return up to ${data.count * 2} candidate professors. Better to return fewer real
     };
 
     const findParsed = (await callGateway(apiKey, {
-      model: "openai/gpt-5.5",
+      model: "google/gemini-2.5-pro",
       messages: [
         { role: "system", content: findSystem },
         { role: "user", content: findUser },
