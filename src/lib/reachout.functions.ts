@@ -303,7 +303,7 @@ Return only candidates whose institutional email you can verify against a specif
     };
 
     const verifyParsed = (await callGateway(apiKey, {
-      model: "openai/gpt-5.5",
+      model: "google/gemini-2.5-pro",
       messages: [
         { role: "system", content: verifySystem },
         { role: "user", content: verifyUser },
