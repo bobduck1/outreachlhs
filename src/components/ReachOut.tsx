@@ -769,7 +769,7 @@ export default function ReachOut() {
                   <button className="ro-btn ro-btn-red" onClick={clearQueue}>Clear Queue</button>
                 </div>
                 <div className="ro-notice">
-                  <strong>How it works:</strong> Click <em>Open in Gmail</em> to launch a pre-filled draft. After you send it, click the <strong>○</strong> to mark them as sent — they'll be hidden from future searches. If 2+ students email the same contact, they're hidden globally for 30 days.
+                  <strong>How it works:</strong> Click <em>Open in Gmail</em> to launch a pre-filled draft. After you send it, click the <strong>○</strong> to mark them as sent — they'll be hidden from future searches. If another student emails the same contact, they're hidden globally for 30 days.
                 </div>
                 {activeQueue.length === 0 ? (
                   <div className="ro-empty">
