@@ -369,7 +369,7 @@ Return only candidates whose institutional email you can verify against a specif
     const results: ContactRow[] = [];
     let cooldownCount = 0;
     for (const c of upserted ?? []) {
-      if ((otherUserCount.get(c.email)?.size ?? 0) >= 2) {
+      if ((otherUserCount.get(c.email)?.size ?? 0) >= 1) {
         cooldownCount++;
         continue;
       }
