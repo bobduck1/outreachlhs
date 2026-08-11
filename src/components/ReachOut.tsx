@@ -673,7 +673,7 @@ export default function ReachOut() {
                   </div>
                 )}
                 {searching ? (
-                  <div className="ro-empty"><span className="ro-empty-icon">🔍</span><div className="ro-empty-title">Searching…</div><div className="ro-empty-sub">Finding verified professors in {SUB_LOOKUP[cat]?.sub.name || cat}.</div></div>
+                  <div className="ro-empty"><span className="ro-empty-icon">🔍</span><div className="ro-empty-title">Searching…</div><div className="ro-empty-sub">Finding & verifying real professor emails in {SUB_LOOKUP[cat]?.sub.name || cat}. This usually takes 1–2 minutes — please keep this tab open.</div></div>
                 ) : results.length === 0 ? (
                   <div className="ro-empty">
                     <span className="ro-empty-icon">{CATS[mainCat].icon}</span>
