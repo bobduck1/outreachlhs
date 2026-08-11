@@ -645,6 +645,9 @@ export default function ReachOut() {
               <button className="ro-btn ro-btn-dark ro-btn-full" onClick={runSearch} disabled={searching || !user}>
                 {searching ? "🔍 Searching…" : `🔍 Find ${SUB_LOOKUP[cat]?.sub.name || "matching"} Contacts`}
               </button>
+              <div className="ro-hint" style={{ fontSize: "0.78rem", opacity: 0.7, marginTop: "0.5rem", textAlign: "center" }}>
+                ⏳ Searches take 1–2 minutes — the AI verifies each professor's real email before showing results. Keep this tab open.
+              </div>
             </div>
           </div>
 
@@ -670,7 +673,7 @@ export default function ReachOut() {
                   </div>
                 )}
                 {searching ? (
-                  <div className="ro-empty"><span className="ro-empty-icon">🔍</span><div className="ro-empty-title">Searching…</div><div className="ro-empty-sub">Finding verified professors in {SUB_LOOKUP[cat]?.sub.name || cat}.</div></div>
+                  <div className="ro-empty"><span className="ro-empty-icon">🔍</span><div className="ro-empty-title">Searching…</div><div className="ro-empty-sub">Finding & verifying real professor emails in {SUB_LOOKUP[cat]?.sub.name || cat}. This usually takes 1–2 minutes — please keep this tab open.</div></div>
                 ) : results.length === 0 ? (
                   <div className="ro-empty">
                     <span className="ro-empty-icon">{CATS[mainCat].icon}</span>
