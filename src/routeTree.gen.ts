@@ -10,33 +10,43 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiPublicBuildLibraryRouteImport } from './routes/api/public/build-library'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicBuildLibraryRoute = ApiPublicBuildLibraryRouteImport.update({
+  id: '/api/public/build-library',
+  path: '/api/public/build-library',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/api/public/build-library': typeof ApiPublicBuildLibraryRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/api/public/build-library': typeof ApiPublicBuildLibraryRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/api/public/build-library': typeof ApiPublicBuildLibraryRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/api/public/build-library'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/api/public/build-library'
+  id: '__root__' | '/' | '/api/public/build-library'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ApiPublicBuildLibraryRoute: typeof ApiPublicBuildLibraryRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +58,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/build-library': {
+      id: '/api/public/build-library'
+      path: '/api/public/build-library'
+      fullPath: '/api/public/build-library'
+      preLoaderRoute: typeof ApiPublicBuildLibraryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ApiPublicBuildLibraryRoute: ApiPublicBuildLibraryRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
