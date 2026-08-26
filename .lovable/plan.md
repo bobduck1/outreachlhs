@@ -1,45 +1,73 @@
-## The real constraint
+## Goal
 
-Searches don't spend your build credits — they spend the workspace **AI balance**, which is separate. Your workspace is on the Free plan, which gets **$1 of AI balance per month** and cannot be topped up (top-ups require a paid plan).
+Stop paying for AI on every student search. Instead, build a large pre-generated library of professors in the database and serve student searches from it. AI runs on a schedule (monthly, in the background) to grow and refresh the library — not while a student is waiting.
 
-Each search today = two Gemini 2.5 Pro calls with big prompts. Realistic cost is roughly **$0.01–0.03 per search**, so $1/month works out to somewhere around **40–90 searches per month total across all users** — i.e. only a couple of searches a day site-wide. That is the number to design around: it's a monthly pool, not a daily one, and one enthusiastic user can drain it in an afternoon.
+This is the single biggest thing you can do for credits: searches go from ~2 expensive AI calls each to a plain database query costing nothing.
 
-So the fix is three layers: cut the cost per search, cap how many searches each student can run, and fail gracefully when the pool is gone.
+## How it works
 
-## 1. Cut cost per search (~50–60% cheaper)
+```text
+BEFORE:  student clicks Search -> 2 AI calls -> 10 professors
+AFTER:   monthly job -> AI fills library (thousands of professors)
+         student clicks Search -> database query -> 10 professors, instant, free
+```
 
-- Pass 1 (find candidates) switches to `google/gemini-2.5-flash`. Candidate discovery is a breadth task; Flash handles it fine.
-- Pass 2 (verify emails) stays on `google/gemini-2.5-pro` so address accuracy is unchanged.
-- Trim pass 1 from `count * 2` candidates down to `count + 5`, which shrinks the pass-2 prompt too.
+## 1. Expand the contacts table into a real library
 
-Effect: roughly 100–200 searches per month instead of 40–90.
+The `contacts` table already exists but only stores what a live search happened to produce. Add the fields the library needs:
 
-## 2. Per-user search quota
+- `tier` (high / medium / low)
+- `research_hook`
+- `verification_source`
+- `state` and `region` (so results can be matched to a student's location without asking AI)
+- `subfield_key` (matches the subcategory keys already in the UI, e.g. `polisci`, `accounting`)
+- `last_verified_at`, `times_served`
 
-New table `search_quota` (`user_id`, `day` date, `count`), user-scoped RLS, GRANTs for authenticated + service_role.
+Indexes on `subfield_key`, `state`, and `tier` so lookups stay instant as the table grows.
 
-`searchContacts` increments the row for today before calling the AI and refuses past the daily cap. Given the total pool is only a few searches a day site-wide, the cap should be **3 per student per day** — generous relative to the pool, and it stops one user from draining the month.
+## 2. Background library builder
 
-The UI shows "2 of 3 searches left today" under the search button and disables the button at zero.
+A `library_jobs` table holds one row per (subfield, state) combination to fill, with a status. A server route at `/api/public/build-library` processes a small bounded batch per call:
 
-## 3. Global monthly kill switch
+- takes a single-flight lock so two runs never overlap
+- pulls up to 3 pending job rows per invocation
+- runs the existing find-then-verify AI passes for that subfield + state
+- upserts verified professors into `contacts` on email
+- marks the row done and records how many were added
+- stops immediately and pauses the whole job if the AI gateway reports no credits
 
-New table `ai_budget` (single row: `month`, `searches_used`, `monthly_cap`), readable by authenticated users, writable only by service_role. Every search increments it; when `searches_used >= monthly_cap`, searches stop.
+`pg_cron` calls it every 10 minutes on the 1st–3rd of each month, then stops. That spreads the cost over hours instead of hammering the gateway, and refreshes the library monthly without you doing anything.
 
-Set `monthly_cap` to a conservative 120 to start. You can raise or lower it later with one row update — no redeploy.
+## 3. Student search reads the library
 
-## 4. Graceful failure
+`searchContacts` changes to a database query:
 
-- If the gateway returns a 402 (credits exhausted) or the monthly cap is hit, `searchContacts` returns a typed `{ blocked: true, reason }` instead of throwing.
-- The UI renders a calm banner in place of results: "Search is paused for this month — new professor searches will be available again on the 1st." Search button disabled, everything else (draft queue, sent log, response tracking) keeps working.
+1. Filter `contacts` by the chosen subfield.
+2. Rank by state match to the student's location first, then nearby states, then anywhere.
+3. Exclude anyone the student already emailed, and anyone under the 30-day global cooldown (one other student in the last 30 days).
+4. Mix the tiers — aim for roughly 5 high / 3 medium / 2 low so the "chances" grouping still has content.
+5. Return 10.
 
-## What this doesn't do
+No AI call, no waiting. The "searches take 1–2 minutes" warning gets removed; results are instant.
 
-It doesn't create more budget. If real students use this daily, $1/month runs out regardless of tuning — a paid plan with AI top-ups is the only way to buy actual headroom. This plan makes the money last as long as possible and makes running out a non-event instead of a broken site.
+**If the library has fewer than 10 matches for that subfield + area**, the UI says so plainly ("we're still building out this field — check back soon") and offers what it does have. There's no silent AI fallback, because that would reintroduce the cost you're trying to avoid.
+
+## 4. Seeding the first batch
+
+The initial library is populated by queueing job rows for every subfield across your target states and letting the same background route drain the queue. Given the AI budget, this happens gradually — expect the library to fill in over hours, not seconds. You can watch the count grow.
+
+## Honest trade-offs
+
+- **Freshness:** a professor's email could go stale between monthly refreshes. `last_verified_at` is stored so you can re-verify the oldest entries first.
+- **Coverage is uneven at first:** popular subfields fill in before niche ones. The UI needs to handle a thin library gracefully, which is why point 3 includes the empty state.
+- **Cost moves, it doesn't vanish:** building the library still spends AI budget. The win is that it's *your* controlled monthly spend instead of unbounded per-student spend, and each professor is paid for once but served to many students over time.
+- **The $1/month free AI balance is still the ceiling.** This plan makes that dollar go much further, but a big library gets built faster on a paid plan with AI top-ups.
 
 ## Technical details
 
-- **Migration:** `search_quota` and `ai_budget` tables, RLS enabled, explicit GRANTs, plus a seed row for the current month in `ai_budget`.
-- **`src/lib/reachout.functions.ts`:** Flash for pass 1, smaller candidate list, quota + budget checks at the top of `searchContacts` (using `supabaseAdmin` inside the handler for the counter writes), 402 mapped to a blocked result, new `getSearchQuota` server fn for the UI.
-- **`src/components/ReachOut.tsx`:** quota display under the search button, disabled state, blocked banner.
+- **Migration:** new columns + indexes on `public.contacts`; new `library_jobs` and `library_lock` tables with RLS and explicit GRANTs (authenticated: read-only where needed; service_role: full).
+- **`src/routes/api/public/build-library.ts`:** new server route, `apikey`-header auth, bounded batch of 3, single-flight lease, idempotent per-job-row progress, halt on 402/403.
+- **`src/lib/reachout.functions.ts`:** `searchContacts` rewritten as a library query (keeps the existing exclusion + cooldown logic, drops the AI calls); the find/verify prompt code moves to a server-only helper used by the background route.
+- **`src/components/ReachOut.tsx`:** remove the 1–2 minute warning, add the thin-library empty state.
+- **pg_cron:** monthly schedule calling the build route.
 - No new packages, no new secrets.
