@@ -1,39 +1,45 @@
-## Goal
+## The real constraint
 
-Let students record how each professor responded after they emailed them: no response yet, responded (no), responded (yes), or responded (other/neutral). Surface those statuses in the Log so the student can see their hit rate.
+Searches don't spend your build credits — they spend the workspace **AI balance**, which is separate. Your workspace is on the Free plan, which gets **$1 of AI balance per month** and cannot be topped up (top-ups require a paid plan).
 
-## Data model
+Each search today = two Gemini 2.5 Pro calls with big prompts. Realistic cost is roughly **$0.01–0.03 per search**, so $1/month works out to somewhere around **40–90 searches per month total across all users** — i.e. only a couple of searches a day site-wide. That is the number to design around: it's a monthly pool, not a daily one, and one enthusiastic user can drain it in an afternoon.
 
-Add one nullable text column to the existing `contact_activity` table: `response_status`, with allowed values `pending` | `no_response` | `declined` | `accepted` | `other`. Default `pending` so every existing "sent" row keeps working with no backfill needed. No new table, no new RLS work — the row is already user-scoped.
+So the fix is three layers: cut the cost per search, cap how many searches each student can run, and fail gracefully when the pool is gone.
 
-## Server functions (`src/lib/reachout.functions.ts`)
+## 1. Cut cost per search (~50–60% cheaper)
 
-- `listMyActivity` — extend the select to include `response_status`.
-- New `setResponseStatus({ email, status })` — validates `status`, updates the row for the current user's `(user_id, contact_email)`, returns `{ ok: true }`. Uses `requireSupabaseAuth`. Same error-handling shape as the other mutations.
+- Pass 1 (find candidates) switches to `google/gemini-2.5-flash`. Candidate discovery is a breadth task; Flash handles it fine.
+- Pass 2 (verify emails) stays on `google/gemini-2.5-pro` so address accuracy is unchanged.
+- Trim pass 1 from `count * 2` candidates down to `count + 5`, which shrinks the pass-2 prompt too.
 
-## UI (`src/components/ReachOut.tsx`)
+Effect: roughly 100–200 searches per month instead of 40–90.
 
-In the **Log / Sent tab**, next to each sent contact add a compact status control (segmented buttons or a small select) with five options:
+## 2. Per-user search quota
 
-- Waiting
-- No response
-- Said no
-- Said yes
-- Other
+New table `search_quota` (`user_id`, `day` date, `count`), user-scoped RLS, GRANTs for authenticated + service_role.
 
-Selecting one calls `setResponseStatus` and optimistically updates local state. Show the current status as a small colored pill on the row (green = yes, red = no, gray = waiting, muted = no response / other).
+`searchContacts` increments the row for today before calling the AI and refuses past the daily cap. Given the total pool is only a few searches a day site-wide, the cap should be **3 per student per day** — generous relative to the pool, and it stops one user from draining the month.
 
-At the top of the Log tab, show a tiny summary line: `X sent · Y replied · Z said yes`. Nothing fancy, just a quick hit-rate readout.
+The UI shows "2 of 3 searches left today" under the search button and disables the button at zero.
 
-No changes to the search flow, draft queue, or email template.
+## 3. Global monthly kill switch
 
-## Trade-offs
+New table `ai_budget` (single row: `month`, `searches_used`, `monthly_cap`), readable by authenticated users, writable only by service_role. Every search increments it; when `searches_used >= monthly_cap`, searches stop.
 
-- Statuses are self-reported; there's no inbox reading. That's fine — matches how the rest of the tool works, and avoids the Gmail-API scope you already decided against.
-- Keeping it on `contact_activity` (rather than a new `responses` table) means one status per user per contact, which is the right shape here.
+Set `monthly_cap` to a conservative 120 to start. You can raise or lower it later with one row update — no redeploy.
+
+## 4. Graceful failure
+
+- If the gateway returns a 402 (credits exhausted) or the monthly cap is hit, `searchContacts` returns a typed `{ blocked: true, reason }` instead of throwing.
+- The UI renders a calm banner in place of results: "Search is paused for this month — new professor searches will be available again on the 1st." Search button disabled, everything else (draft queue, sent log, response tracking) keeps working.
+
+## What this doesn't do
+
+It doesn't create more budget. If real students use this daily, $1/month runs out regardless of tuning — a paid plan with AI top-ups is the only way to buy actual headroom. This plan makes the money last as long as possible and makes running out a non-event instead of a broken site.
 
 ## Technical details
 
-- **Migration:** add `response_status text not null default 'pending'` with a check constraint on the five allowed values.
-- **Files changed:** `src/lib/reachout.functions.ts` (extend select, add `setResponseStatus`), `src/components/ReachOut.tsx` (status control + summary in the Log tab, wire up the new server fn, extend the activity type).
-- **No new packages, no new secrets.**
+- **Migration:** `search_quota` and `ai_budget` tables, RLS enabled, explicit GRANTs, plus a seed row for the current month in `ai_budget`.
+- **`src/lib/reachout.functions.ts`:** Flash for pass 1, smaller candidate list, quota + budget checks at the top of `searchContacts` (using `supabaseAdmin` inside the handler for the counter writes), 402 mapped to a blocked result, new `getSearchQuota` server fn for the UI.
+- **`src/components/ReachOut.tsx`:** quota display under the search button, disabled state, blocked banner.
+- No new packages, no new secrets.
