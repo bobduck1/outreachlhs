@@ -46,10 +46,18 @@ export type Database = {
           field: string | null
           id: string
           institution: string | null
+          last_verified_at: string
           location: string | null
           name: string
+          region: string | null
+          research_hook: string | null
           source: string
+          state: string | null
+          subfield_key: string | null
+          tier: string
+          times_served: number
           title: string | null
+          verification_source: string | null
         }
         Insert: {
           category?: string | null
@@ -58,10 +66,18 @@ export type Database = {
           field?: string | null
           id?: string
           institution?: string | null
+          last_verified_at?: string
           location?: string | null
           name: string
+          region?: string | null
+          research_hook?: string | null
           source?: string
+          state?: string | null
+          subfield_key?: string | null
+          tier?: string
+          times_served?: number
           title?: string | null
+          verification_source?: string | null
         }
         Update: {
           category?: string | null
@@ -70,10 +86,84 @@ export type Database = {
           field?: string | null
           id?: string
           institution?: string | null
+          last_verified_at?: string
           location?: string | null
           name?: string
+          region?: string | null
+          research_hook?: string | null
           source?: string
+          state?: string | null
+          subfield_key?: string | null
+          tier?: string
+          times_served?: number
           title?: string | null
+          verification_source?: string | null
+        }
+        Relationships: []
+      }
+      library_jobs: {
+        Row: {
+          attempts: number
+          category: string
+          created_at: string
+          id: string
+          last_error: string | null
+          professors_added: number
+          search_term: string
+          state: string
+          status: string
+          subfield_key: string
+          updated_at: string
+        }
+        Insert: {
+          attempts?: number
+          category?: string
+          created_at?: string
+          id?: string
+          last_error?: string | null
+          professors_added?: number
+          search_term: string
+          state: string
+          status?: string
+          subfield_key: string
+          updated_at?: string
+        }
+        Update: {
+          attempts?: number
+          category?: string
+          created_at?: string
+          id?: string
+          last_error?: string | null
+          professors_added?: number
+          search_term?: string
+          state?: string
+          status?: string
+          subfield_key?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      library_lock: {
+        Row: {
+          id: number
+          lease_until: string | null
+          pause_reason: string | null
+          paused: boolean
+          updated_at: string
+        }
+        Insert: {
+          id?: number
+          lease_until?: string | null
+          pause_reason?: string | null
+          paused?: boolean
+          updated_at?: string
+        }
+        Update: {
+          id?: number
+          lease_until?: string | null
+          pause_reason?: string | null
+          paused?: boolean
+          updated_at?: string
         }
         Relationships: []
       }
