@@ -281,7 +281,7 @@ export default function ReachOut() {
   type RespStatus = "pending" | "no_response" | "declined" | "accepted" | "other";
   const [responseStatuses, setResponseStatuses] = useState<Record<string, RespStatus>>({});
   const [searching, setSearching] = useState(false);
-  const [lastSearchInfo, setLastSearchInfo] = useState<{ cat: string; cooldownCount: number } | null>(null);
+  const [lastSearchInfo, setLastSearchInfo] = useState<{ cat: string; cooldownCount: number; libraryTotal: number } | null>(null);
   const [logs, setLogs] = useState<{ ts: string; msg: string; type: string }[]>([
     { ts: new Date().toLocaleTimeString(), msg: "ReachOut initialized.", type: "info" },
   ]);
@@ -411,6 +411,7 @@ export default function ReachOut() {
     addLog(`Searching for ${lookup.sub.name} professors…`, "info");
     try {
       const res = await searchContacts({ data: {
+        subfield: cat,
         field: lookup.sub.searchTerm,
         category: CATS[lookup.mainKey].name,
         location: form.location,
@@ -418,7 +419,7 @@ export default function ReachOut() {
         count: 10,
       }});
       setResults(res.contacts);
-      setLastSearchInfo({ cat, cooldownCount: res.cooldownCount });
+      setLastSearchInfo({ cat, cooldownCount: res.cooldownCount, libraryTotal: res.libraryTotal });
       addLog(`Found ${res.contacts.length} professor(s)${res.cooldownCount ? ` (${res.cooldownCount} hidden — currently claimed by other students)` : ""}.`, res.contacts.length ? "ok" : "warn");
     } catch (e: any) {
       addLog(`Search failed: ${e.message}`, "err");
@@ -646,7 +647,7 @@ export default function ReachOut() {
                 {searching ? "🔍 Searching…" : `🔍 Find ${SUB_LOOKUP[cat]?.sub.name || "matching"} Contacts`}
               </button>
               <div className="ro-hint" style={{ fontSize: "0.78rem", opacity: 0.7, marginTop: "0.5rem", textAlign: "center" }}>
-                ⏳ Searches take 1–2 minutes — the AI verifies each professor's real email before showing results. Keep this tab open.
+                ⚡ Instant — professors come from our verified library, matched to your location.
               </div>
             </div>
           </div>
@@ -673,12 +674,18 @@ export default function ReachOut() {
                   </div>
                 )}
                 {searching ? (
-                  <div className="ro-empty"><span className="ro-empty-icon">🔍</span><div className="ro-empty-title">Searching…</div><div className="ro-empty-sub">Finding & verifying real professor emails in {SUB_LOOKUP[cat]?.sub.name || cat}. This usually takes 1–2 minutes — please keep this tab open.</div></div>
+                  <div className="ro-empty"><span className="ro-empty-icon">🔍</span><div className="ro-empty-title">Searching…</div><div className="ro-empty-sub">Matching verified {SUB_LOOKUP[cat]?.sub.name || cat} professors to your location.</div></div>
+                ) : results.length === 0 && lastSearchInfo && lastSearchInfo.libraryTotal === 0 ? (
+                  <div className="ro-empty">
+                    <span className="ro-empty-icon">🏗️</span>
+                    <div className="ro-empty-title">Still building out this field</div>
+                    <div className="ro-empty-sub">We haven't added {SUB_LOOKUP[cat]?.sub.name || "these"} professors to the library yet. Check back soon, or try a related subfield.</div>
+                  </div>
                 ) : results.length === 0 ? (
                   <div className="ro-empty">
                     <span className="ro-empty-icon">{CATS[mainCat].icon}</span>
                     <div className="ro-empty-title">Ready to search</div>
-                    <div className="ro-empty-sub">Pick a subfield, add your interests & location, then click <strong>Find Professors</strong>. AI only returns emails it's 100% confident about.</div>
+                    <div className="ro-empty-sub">Pick a subfield, add your location, then click <strong>Find Professors</strong>. Every email in the library was verified against a published university source.</div>
                   </div>
                 ) : visibleResults.length === 0 ? (
                   <div className="ro-empty">
