@@ -232,17 +232,6 @@ export const searchContacts = createServerFn({ method: "POST" })
       verification_source: c.verification_source ?? "",
     }));
 
-    if (contacts.length) {
-      await supabaseAdmin
-        .from("contacts")
-        .update({ times_served: 1 })
-        .in("id", []); // no-op guard; counter updated below per row
-      await Promise.all(
-        contacts.map((c) =>
-          supabaseAdmin.rpc as unknown as undefined ? Promise.resolve() : Promise.resolve(),
-        ),
-      );
-    }
 
     return { contacts, cooldownCount, libraryTotal };
   });
