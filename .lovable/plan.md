@@ -2,8 +2,8 @@
 
 - STEM dropdown: add "Nursing" and "Health Sciences".
 - Humanities dropdown: add "Languages" and "Social Work".
-- Queue professor-library build jobs for the 4 new fields (NJ, NY, PA, CT, DE, MD, same as existing fields) so results fill in automatically.
+- No automatic professor search for these fields — you will upload your own NJ CSV with contacts for them.
 
 ## Technical details
 - `src/components/ReachOut.tsx` CATS: add subs `nursing`, `health-sci`, `languages` (search term "foreign languages / modern languages"), `social-work`.
-- Insert pending `library_jobs` rows for each new subfield x state. Until jobs run, students see the existing "still building out this field" message.
+- Until your CSV is imported, students see the existing "still building out this field" message.
