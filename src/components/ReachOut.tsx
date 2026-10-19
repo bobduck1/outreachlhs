@@ -150,6 +150,8 @@ const CATS: Record<string, MainCat> = {
       { key: "math",          name: "Mathematics",          searchTerm: "mathematics" },
       { key: "stats",         name: "Statistics / Data Sci", searchTerm: "statistics or data science" },
       { key: "premed",        name: "Pre-Med / Medical Research", searchTerm: "medical school faculty doing clinical or biomedical research" },
+      { key: "nursing",       name: "Nursing",              searchTerm: "nursing" },
+      { key: "health-sci",    name: "Health Sciences",      searchTerm: "health sciences" },
     ],
   },
   business: {
@@ -179,6 +181,8 @@ const CATS: Record<string, MainCat> = {
       { key: "law",         name: "Law / Legal Studies", searchTerm: "law or legal studies (law school professors)" },
       { key: "linguistics", name: "Linguistics",       searchTerm: "linguistics" },
       { key: "religion",    name: "Religious Studies", searchTerm: "religious studies" },
+      { key: "languages",   name: "Languages",         searchTerm: "foreign languages / modern languages" },
+      { key: "social-work", name: "Social Work",       searchTerm: "social work" },
     ],
   },
 };
