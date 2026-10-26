@@ -6,7 +6,11 @@ export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "ReachOut — High School Outreach Engine" },
-      { name: "description", content: "Find professors and professionals and generate ready-to-send outreach email drafts." },
+      { name: "description", content: "Find university professors by major and location and prepare research-assistance outreach drafts for high school students." },
+      { property: "og:title", content: "ReachOut — High School Outreach Engine" },
+      { property: "og:description", content: "Connect with university professors in your field and prepare personalized research-assistance outreach." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: () => (

@@ -144,6 +144,7 @@ const CATS: Record<string, MainCat> = {
       { key: "mech-eng",      name: "Mechanical Engineering", searchTerm: "mechanical engineering" },
       { key: "elec-eng",      name: "Electrical Engineering", searchTerm: "electrical engineering" },
       { key: "civil-eng",     name: "Civil Engineering",    searchTerm: "civil engineering" },
+      { key: "chem-eng",      name: "Chemical Engineering", searchTerm: "chemical engineering" },
       { key: "bio-eng",       name: "Biomedical Engineering", searchTerm: "biomedical engineering" },
       { key: "environmental", name: "Environmental Science", searchTerm: "environmental science" },
       { key: "neuro",         name: "Neuroscience",         searchTerm: "neuroscience" },
@@ -183,6 +184,7 @@ const CATS: Record<string, MainCat> = {
       { key: "religion",    name: "Religious Studies", searchTerm: "religious studies" },
       { key: "languages",   name: "Languages",         searchTerm: "foreign languages / modern languages" },
       { key: "social-work", name: "Social Work",       searchTerm: "social work" },
+      { key: "architecture-design", name: "Architecture and Design", searchTerm: "architecture and design" },
     ],
   },
 };
