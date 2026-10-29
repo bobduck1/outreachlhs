@@ -210,9 +210,34 @@ type FormState = {
 type QueueItem = Contact & { qid: string; status: "pending" | "done" | "sent"; catKey: string; sentAt?: string };
 
 // ─── EMAIL TEMPLATES ──────────────────────────────────────────────────────────
+// Menu names with a slash read badly inside a sentence, so spell those few out ("Statistics / Data Sci" -> "Statistics and Data Science").
+const FIELD_LABELS: Record<string, string> = {
+  "Statistics / Data Sci": "Statistics and Data Science",
+  "Pre-Med / Medical Research": "Pre-Med and Medical Research",
+  "Operations / Supply Chain": "Operations and Supply Chain",
+  "Law / Legal Studies": "Law and Legal Studies",
+  "English / Literature": "English and Literature",
+};
+function fieldLabel(raw: string): string {
+  return FIELD_LABELS[(raw || "").trim()] || raw;
+}
+
+// Last name that survives suffixes and name parts: "Aaron van Klyton Jr." -> "van Klyton", "G. Charles Dismukes" -> "Dismukes".
+const NAME_SUFFIXES = new Set(["jr", "sr", "ii", "iii", "iv", "v", "phd", "md", "edd", "dds", "esq"]);
+const NAME_PARTICLES = new Set(["van", "von", "de", "del", "della", "di", "da", "la", "le", "al", "el", "bin", "ibn", "der", "den", "ter", "ten", "dos", "das", "du", "st"]);
+function surnameOf(full: string): string {
+  const cleaned = (full || "").replace(/,/g, " ").replace(/^\s*(dr|prof|professor)\.?\s+/i, "");
+  const parts = cleaned.split(/\s+/).filter(Boolean);
+  const bare = (p: string) => p.replace(/\./g, "").toLowerCase();
+  while (parts.length > 1 && NAME_SUFFIXES.has(bare(parts[parts.length - 1]))) parts.pop();
+  let i = parts.length - 1;
+  while (i > 0 && NAME_PARTICLES.has(bare(parts[i - 1]))) i--;
+  return parts.slice(i).join(" ") || full;
+}
+
 function buildSubject(contact: Contact, subKey: string): string {
   const sub = SUB_LOOKUP[subKey]?.sub;
-  const fieldName = sub?.name || contact.field || "your field";
+  const fieldName = fieldLabel(sub?.name || contact.field || "your field");
   return `High School Student Seeking Research Opportunity in ${fieldName}`;
 }
 
@@ -221,20 +246,20 @@ function buildBody(contact: Contact, subKey: string, info: FormState): string {
   const titleRaw = (contact.title || "").toLowerCase();
 
   let sal = "Professor";
-  if (titleRaw.includes("dr") && !titleRaw.includes("professor") && !titleRaw.includes("prof")) sal = "Dr.";
-  const lastName = contact.name.split(" ").slice(-1)[0];
+  if (/\bdr\.?(\s|$)/.test(titleRaw) && !titleRaw.includes("prof")) sal = "Dr.";
+  const lastName = surnameOf(contact.name);
 
   const sub = SUB_LOOKUP[subKey]?.sub;
-  const fieldPhrase = contact.field || sub?.name || "your area of work";
+  const fieldPhrase = fieldLabel(contact.field || sub?.name || "your area of work");
   const studentInterest = interests.trim() || fieldPhrase;
 
   // Research-assist ask for EVERYONE — no shadowing.
-  const ask = `I am reaching out to ask if there is any way I could contribute to your research in a small, supporting capacity. I am willing to assist with background research, literature review, data organization, or any supporting tasks — whatever would be most helpful.`;
+  const ask = `I am reaching out to ask if there is any way I could contribute to any research projects you have in a small, supporting capacity. I am willing to assist with background research, literature review, data organization, or any supporting tasks — whatever would be most helpful.`;
 
   const profileLine = contact.title && contact.institution
     ? `I came across your profile at ${contact.institution} as ${contact.title}, and I was drawn to the department's strong emphasis on ${fieldPhrase}.`
     : contact.institution
-    ? `I came across your work at ${contact.institution}, and I was drawn to its strong emphasis on ${fieldPhrase}.`
+    ? `I came across your profile at ${contact.institution}, and I was drawn to its strong emphasis on ${fieldPhrase}.`
     : `I came across your work in ${fieldPhrase}, and I was drawn to your focus in this area.`;
 
   const hook = contact.research_hook?.trim();
@@ -242,7 +267,6 @@ function buildBody(contact: Contact, subKey: string, info: FormState): string {
     ? ` I was especially interested in your work on ${hook.replace(/\.$/, "")}, which struck me as exactly the kind of question I would love to think more carefully about.`
     : "";
 
-  const connector = `The intersection of ${studentInterest}, which sits at the heart of how we understand the world around us, is something I think about constantly as a high school student navigating an overwhelming information environment.`;
 
   const resumeAttachLine = resume.trim() ? ` I have attached my resume for your reference.` : ``;
 
@@ -251,7 +275,7 @@ function buildBody(contact: Contact, subKey: string, info: FormState): string {
   const body = [
     `Dear ${sal} ${lastName},`,
     opener,
-    `${profileLine}${hookLine} ${connector}`,
+    `${profileLine}${hookLine}`,
     `${ask}${resumeAttachLine}`,
     `I understand this is an unusual request coming from a high school student, and I deeply appreciate any time you can spare. Even brief guidance about how to prepare for this kind of work would be meaningful to me.`,
     `Thank you very much for your consideration.`,
